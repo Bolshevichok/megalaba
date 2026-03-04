@@ -1,18 +1,19 @@
 <!--
 Sync Impact Report
 ===================
-Version change: 0.0.0 → 1.0.0 (initial ratification)
-Modified principles: N/A (first version)
+Version change: 1.0.0 → 1.1.0 (MINOR — 3 new principles added,
+  Principle IV expanded with data retention policy)
+Modified principles:
+  - IV. Data Integrity & Persistence — expanded with retention/archival rules
 Added sections:
-  - Core Principles (6 principles)
-  - Technology Stack Constraints
-  - Development Workflow & Quality Gates
-  - Governance
+  - VII. Observability & Monitoring (new principle)
+  - VIII. Device Resilience (new principle)
+  - IX. Contract Stability (new principle)
 Removed sections: N/A
 Templates requiring updates:
-  - .specify/templates/plan-template.md — ✅ no update needed (Constitution Check section is generic)
-  - .specify/templates/spec-template.md — ✅ no update needed (requirements section aligns)
-  - .specify/templates/tasks-template.md — ✅ no update needed (phase structure compatible)
+  - .specify/templates/plan-template.md — ✅ no update needed
+  - .specify/templates/spec-template.md — ✅ no update needed
+  - .specify/templates/tasks-template.md — ✅ no update needed
 Follow-up TODOs: none
 -->
 
@@ -61,10 +62,17 @@ PostgreSQL. Schema changes MUST be managed through Alembic
 migrations — manual DDL in production is prohibited. Time-series
 sensor data MUST be indexed by (device_id, sensor_type, timestamp).
 Actuator commands MUST track full lifecycle status:
-pending → sent → confirmed | failed.
+pending → sent → confirmed | failed. Data retention policy:
+raw sensor readings MUST be kept for 7 days, aggregated to
+hourly averages after 7 days, and to monthly aggregates after
+90 days. Actuator command history MUST be retained for at
+least 30 days. An automated cleanup job MUST enforce these
+retention windows.
 
 Rationale: reliable data persistence is critical for monitoring
-history, analytics, and audit trail of device commands.
+history, analytics, and audit trail of device commands. Retention
+policy prevents unbounded storage growth from high-frequency
+sensor data.
 
 ### V. Security by Default
 
@@ -90,6 +98,51 @@ integration is out of scope for MVP.
 
 Rationale: project motto "Don't eat hedgehogs" — avoid
 overcomplication that delays delivery without measurable benefit.
+
+### VII. Observability & Monitoring
+
+All backend services MUST use structured logging in JSON format
+with levels DEBUG, INFO, WARNING, ERROR. Every API request MUST
+be logged with method, path, status code, and duration. MQTT
+message receipt and publishing MUST be logged at INFO level.
+Device connectivity changes (online/offline) MUST generate
+log events and be queryable through the API. Health check
+endpoints (`/health`, `/health/db`, `/health/mqtt`) MUST be
+implemented and return component status.
+
+Rationale: an IoT system with multiple autonomous devices
+requires full visibility into message flow, device state, and
+service health to diagnose issues without physical access to
+hardware.
+
+### VIII. Device Resilience
+
+IoT devices MUST implement automatic WiFi and MQTT reconnection
+with exponential backoff. Every device MUST configure an MQTT
+Last Will Testament message so the backend detects disconnections
+without polling. The backend MUST track `last_seen` timestamp
+per device and expose online/offline status through the API.
+Commands sent to offline devices MUST be rejected with an
+explicit error — silent drops are prohibited.
+
+Rationale: greenhouse devices operate in environments with
+unstable connectivity; the system MUST degrade gracefully and
+report device state accurately to the operator.
+
+### IX. Contract Stability
+
+REST API endpoints MUST conform to the specification in
+`docs/api_specification.md`. Any breaking change to the REST API
+MUST increment the URL version (`/api/v1` → `/api/v2`). MQTT
+topic structure (`devices/{device_id}/{category}/{type}`) and
+payload format MUST NOT change without a documented migration
+plan, because ESP32 firmware updates are costly. New sensor types
+or actuator types MAY be added without breaking the contract as
+long as the topic pattern is preserved.
+
+Rationale: IoT firmware is harder to update than server-side
+code; API and MQTT contracts must remain stable to avoid bricking
+deployed devices.
 
 ## Technology Stack Constraints
 
@@ -143,4 +196,4 @@ and clarification fixes.
 Constitution Check section that verifies alignment with these
 principles before work begins.
 
-**Version**: 1.0.0 | **Ratified**: 2026-03-04 | **Last Amended**: 2026-03-04
+**Version**: 1.1.0 | **Ratified**: 2026-03-04 | **Last Amended**: 2026-03-04
