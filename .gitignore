@@ -1,2 +1,15 @@
 .[v]env
 .DS_Store
+__pycache__/
+*.pyc
+*.pyo
+dist/
+*.egg-info/
+.env
+.env.*
+*.log
+*.tmp
+*.swp
+.vscode/
+.idea/
+Thumbs.db
