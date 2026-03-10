@@ -12,7 +12,7 @@ router = APIRouter(tags=["simulator"])
 
 
 @router.post("/simulator/start")
-def start_simulator() -> dict:
+async def start_simulator() -> dict:
     """Start the simulator engine.
 
     If the simulator is already running, returns the current status
@@ -25,7 +25,7 @@ def start_simulator() -> dict:
 
 
 @router.post("/simulator/stop")
-def stop_simulator() -> dict:
+async def stop_simulator() -> dict:
     """Stop the simulator engine.
 
     Returns:
@@ -35,7 +35,7 @@ def stop_simulator() -> dict:
 
 
 @router.get("/simulator/status")
-def simulator_status() -> dict:
+async def simulator_status() -> dict:
     """Get current simulator status.
 
     Returns:

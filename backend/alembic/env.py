@@ -1,11 +1,15 @@
 """Alembic environment configuration for migrations."""
 
 import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
-from alembic import context
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from sqlalchemy import create_engine
 
+from alembic import context
 from app.database import Base
 from app.models import *  # noqa: F401,F403 - import all models for autogenerate
 

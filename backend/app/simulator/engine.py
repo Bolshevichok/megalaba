@@ -15,6 +15,7 @@ from app.database import SessionLocal
 from app.models import (
     ActuatorType,
     Device,
+    DeviceStatus,
     SensorReading,
     SensorType,
 )
@@ -75,7 +76,7 @@ class SimulatorEngine:
         finally:
             db.close()
 
-        self.task = asyncio.create_task(self._run_loop())
+        self.task = asyncio.get_event_loop().create_task(self._run_loop())
         logger.info(
             "Simulator started with %d devices", self.devices_count
         )
@@ -129,6 +130,10 @@ class SimulatorEngine:
                     self.devices_count = len(devices)
 
                     for device in devices:
+                        # Keep device online while simulator is active
+                        device.status = DeviceStatus.online
+                        device.last_seen = datetime.now(timezone.utc)
+
                         # Collect actuator states for this device
                         actuator_states: dict[str, str] = {}
                         for actuator in device.actuators:
