@@ -3,29 +3,26 @@
 ## Base URL
 ```
 Development: http://localhost:8000/api/v1
-Production: https://api.greenhouse.example.com/api/v1
 ```
 
 ## Authentication
 
 ### JWT Token Authentication
-All protected endpoints require a Bearer token in the Authorization header:
-
+All protected endpoints require a Bearer token:
 ```http
 Authorization: Bearer <jwt_token>
 ```
 
-### Auth Endpoints
-
-#### POST /auth/register
-Register a new user account.
+### POST /auth/register
+Register a new user.
 
 **Request:**
 ```json
 {
-  "username": "user123",
-  "email": "user@example.com",
-  "password": "SecurePass123!"
+  "name": "Ivan Petrov",
+  "email": "ivan@example.com",
+  "password": "SecurePass123!",
+  "phone": "+79001234567"
 }
 ```
 
@@ -33,20 +30,18 @@ Register a new user account.
 ```json
 {
   "id": 1,
-  "username": "user123",
-  "email": "user@example.com",
-  "is_active": true,
-  "created_at": "2025-01-15T10:00:00Z"
+  "name": "Ivan Petrov",
+  "email": "ivan@example.com",
+  "created_at": "2026-03-07T10:00:00Z"
 }
 ```
 
-#### POST /auth/login
-Authenticate and receive JWT token.
+### POST /auth/login
 
 **Request:**
 ```json
 {
-  "username": "user123",
+  "email": "ivan@example.com",
   "password": "SecurePass123!"
 }
 ```
@@ -54,464 +49,544 @@ Authenticate and receive JWT token.
 **Response:** `200 OK`
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "access_token": "eyJhbGci...",
   "token_type": "bearer",
   "expires_in": 3600
 }
 ```
 
-#### POST /auth/refresh
-Refresh JWT token.
+### POST /auth/refresh
 
 **Request:**
 ```json
 {
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "refresh_token": "eyJhbGci..."
 }
 ```
 
 **Response:** `200 OK`
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "access_token": "eyJhbGci...",
   "token_type": "bearer",
   "expires_in": 3600
 }
 ```
 
-## Device Management
-
-#### GET /devices
-List all devices.
-
-**Query Parameters:**
-- `is_active` (boolean): Filter by activation status
-- `is_online` (boolean): Filter by online status
-- `limit` (integer): Number of results (default: 100)
-- `offset` (integer): Pagination offset (default: 0)
+### GET /auth/me
 
 **Response:** `200 OK`
 ```json
 {
-  "total": 3,
-  "limit": 100,
-  "offset": 0,
+  "id": 1,
+  "name": "Ivan Petrov",
+  "email": "ivan@example.com",
+  "phone": "+79001234567",
+  "billing_address": null,
+  "created_at": "2026-03-07T10:00:00Z"
+}
+```
+
+---
+
+## Greenhouses
+
+### GET /greenhouses
+List all greenhouses for the authenticated user.
+
+**Response:** `200 OK`
+```json
+{
+  "total": 2,
+  "greenhouses": [
+    {
+      "id": 1,
+      "name": "Main Greenhouse",
+      "location": "Building A, Section 1",
+      "device_count": 3,
+      "online_device_count": 2,
+      "created_at": "2026-03-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+### GET /greenhouses/{greenhouse_id}
+Get greenhouse details with devices summary.
+
+**Response:** `200 OK`
+```json
+{
+  "id": 1,
+  "name": "Main Greenhouse",
+  "location": "Building A, Section 1",
   "devices": [
     {
       "id": 1,
-      "device_id": "greenhouse_01",
-      "name": "Main Greenhouse",
-      "description": "Primary growing area",
-      "location": "Building A, Section 1",
-      "device_type": "greenhouse",
-      "is_active": true,
-      "is_online": true,
-      "last_seen": "2025-01-15T14:30:00Z",
-      "created_at": "2025-01-01T10:00:00Z",
-      "updated_at": "2025-01-15T14:30:00Z"
+      "name": "Zone 1 Controller",
+      "connection_type": "wifi",
+      "ip_address": "192.168.1.10",
+      "status": "online",
+      "sensor_count": 4,
+      "actuator_count": 4
     }
-  ]
+  ],
+  "scripts": [
+    {
+      "id": 1,
+      "name": "Auto watering",
+      "enabled": true
+    }
+  ],
+  "created_at": "2026-03-01T10:00:00Z"
 }
 ```
 
-#### GET /devices/{device_id}
-Get specific device details.
-
-**Response:** `200 OK`
-```json
-{
-  "id": 1,
-  "device_id": "greenhouse_01",
-  "name": "Main Greenhouse",
-  "description": "Primary growing area",
-  "location": "Building A, Section 1",
-  "device_type": "greenhouse",
-  "is_active": true,
-  "is_online": true,
-  "last_seen": "2025-01-15T14:30:00Z",
-  "mqtt_client_id": "esp32_greenhouse_01",
-  "config": {
-    "wifi_strength": -45,
-    "firmware_version": "1.0.0"
-  },
-  "created_at": "2025-01-01T10:00:00Z",
-  "updated_at": "2025-01-15T14:30:00Z"
-}
-```
-
-#### POST /devices
-Register a new device.
+### POST /greenhouses
+Create a new greenhouse.
 
 **Request:**
 ```json
 {
-  "device_id": "greenhouse_03",
-  "name": "Test Greenhouse",
-  "description": "Testing environment",
-  "location": "Lab",
-  "device_type": "greenhouse"
+  "name": "New Greenhouse",
+  "location": "Building B"
 }
 ```
 
 **Response:** `201 Created`
-```json
-{
-  "id": 3,
-  "device_id": "greenhouse_03",
-  "name": "Test Greenhouse",
-  "is_active": true,
-  "is_online": false,
-  "created_at": "2025-01-15T15:00:00Z"
-}
-```
 
-#### PUT /devices/{device_id}
-Update device information.
+### PUT /greenhouses/{greenhouse_id}
+Update greenhouse.
 
 **Request:**
 ```json
 {
-  "name": "Updated Greenhouse Name",
-  "location": "New Location",
-  "is_active": true
+  "name": "Updated Name",
+  "location": "Updated Location"
 }
 ```
 
 **Response:** `200 OK`
-```json
-{
-  "id": 1,
-  "device_id": "greenhouse_01",
-  "name": "Updated Greenhouse Name",
-  "location": "New Location",
-  "updated_at": "2025-01-15T15:30:00Z"
-}
-```
 
-#### DELETE /devices/{device_id}
-Deactivate a device.
+### DELETE /greenhouses/{greenhouse_id}
 
 **Response:** `204 No Content`
 
-## Sensor Data
+---
 
-#### GET /devices/{device_id}/sensors
-Get latest sensor readings for all sensors on a device.
+## Devices
+
+### GET /greenhouses/{greenhouse_id}/devices
+List devices in a greenhouse.
+
+**Query Parameters:**
+- `status` (string): Filter by status (`online`, `offline`)
 
 **Response:** `200 OK`
 ```json
 {
-  "device_id": "greenhouse_01",
-  "readings": [
+  "total": 2,
+  "devices": [
     {
-      "sensor_type": "temperature",
-      "value": 22.5,
-      "unit": "°C",
-      "timestamp": "2025-01-15T14:30:00Z"
-    },
-    {
-      "sensor_type": "humidity",
-      "value": 65.0,
-      "unit": "%",
-      "timestamp": "2025-01-15T14:30:00Z"
-    },
-    {
-      "sensor_type": "light",
-      "value": 8500,
-      "unit": "lux",
-      "timestamp": "2025-01-15T14:30:00Z"
+      "id": 1,
+      "name": "Zone 1 Controller",
+      "connection_type": "wifi",
+      "ip_address": "192.168.1.10",
+      "status": "online",
+      "created_at": "2026-03-01T10:00:00Z"
     }
   ]
 }
 ```
 
-#### GET /devices/{device_id}/sensors/{sensor_type}
-Get specific sensor readings.
-
-**Query Parameters:**
-- `start_time` (ISO 8601 datetime): Start of time range
-- `end_time` (ISO 8601 datetime): End of time range
-- `limit` (integer): Number of readings (default: 100, max: 1000)
-- `aggregation` (string): Aggregation type (none, hourly, daily)
+### GET /greenhouses/{greenhouse_id}/devices/{device_id}
+Get device details with sensors and actuators.
 
 **Response:** `200 OK`
 ```json
 {
-  "device_id": "greenhouse_01",
-  "sensor_type": "temperature",
-  "unit": "°C",
-  "readings": [
+  "id": 1,
+  "name": "Zone 1 Controller",
+  "connection_type": "wifi",
+  "ip_address": "192.168.1.10",
+  "status": "online",
+  "sensors": [
     {
-      "value": 22.5,
-      "timestamp": "2025-01-15T14:30:00Z"
-    },
-    {
-      "value": 22.3,
-      "timestamp": "2025-01-15T14:25:00Z"
-    },
-    {
-      "value": 22.1,
-      "timestamp": "2025-01-15T14:20:00Z"
+      "id": 1,
+      "name": "Air Temperature",
+      "sensor_type": "temperature",
+      "unit": "°C",
+      "latest_value": 22.5,
+      "latest_recorded_at": "2026-03-07T14:30:00Z"
     }
   ],
-  "statistics": {
-    "min": 22.1,
-    "max": 22.5,
-    "avg": 22.3,
-    "count": 3
-  }
+  "actuators": [
+    {
+      "id": 1,
+      "actuator_type": "irrigation",
+      "status": "off"
+    }
+  ]
 }
 ```
 
-#### POST /devices/{device_id}/sensors/{sensor_type}
-Manually add a sensor reading (for testing/manual input).
+### POST /greenhouses/{greenhouse_id}/devices
+Create a new device.
 
 **Request:**
 ```json
 {
-  "value": 23.5,
-  "timestamp": "2025-01-15T15:00:00Z"
+  "name": "Zone 3 Controller",
+  "connection_type": "wifi",
+  "ip_address": "192.168.1.12"
 }
 ```
 
 **Response:** `201 Created`
-```json
-{
-  "id": 12345,
-  "device_id": "greenhouse_01",
-  "sensor_type": "temperature",
-  "value": 23.5,
-  "unit": "°C",
-  "timestamp": "2025-01-15T15:00:00Z"
-}
-```
 
-## Actuator Control
+### PUT /greenhouses/{greenhouse_id}/devices/{device_id}
+Update device.
 
-#### GET /devices/{device_id}/actuators
-Get current status of all actuators.
+### DELETE /greenhouses/{greenhouse_id}/devices/{device_id}
+
+**Response:** `204 No Content`
+
+---
+
+## Sensors
+
+### GET /greenhouses/{greenhouse_id}/devices/{device_id}/sensors
+List all sensors on a device with latest readings.
 
 **Response:** `200 OK`
 ```json
 {
-  "device_id": "greenhouse_01",
-  "actuators": [
+  "sensors": [
     {
-      "actuator_type": "lighting",
-      "status": "on",
-      "last_command": "2025-01-15T14:00:00Z",
-      "last_update": "2025-01-15T14:00:05Z"
+      "id": 1,
+      "name": "Air Temperature",
+      "sensor_type": "temperature",
+      "unit": "°C",
+      "latest_value": 22.5,
+      "latest_recorded_at": "2026-03-07T14:30:00Z"
     },
     {
-      "actuator_type": "heating",
-      "status": "off",
-      "last_command": "2025-01-15T13:00:00Z",
-      "last_update": "2025-01-15T13:00:03Z"
-    },
-    {
-      "actuator_type": "ventilation",
-      "status": "on",
-      "last_command": "2025-01-15T14:30:00Z",
-      "last_update": "2025-01-15T14:30:02Z"
-    },
-    {
-      "actuator_type": "watering",
-      "status": "off",
-      "last_command": "2025-01-15T12:00:00Z",
-      "last_update": "2025-01-15T12:00:04Z"
+      "id": 2,
+      "name": "Air Humidity",
+      "sensor_type": "humidity",
+      "unit": "%",
+      "latest_value": 65.0,
+      "latest_recorded_at": "2026-03-07T14:30:00Z"
     }
   ]
 }
 ```
 
-#### POST /devices/{device_id}/actuators/{actuator_type}
-Send command to an actuator.
+### GET /sensors/{sensor_id}/readings
+Get historical readings for a sensor.
 
-**Request:**
+**Query Parameters:**
+- `start_time` (ISO 8601): Start of time range
+- `end_time` (ISO 8601): End of time range
+- `limit` (integer): Number of readings (default: 100, max: 1000)
+- `aggregation` (string): `none`, `hourly`, `daily`
+
+**Response:** `200 OK`
 ```json
 {
-  "command": "on",
-  "parameters": {
-    "duration": 300,
-    "intensity": 80
+  "sensor_id": 1,
+  "sensor_type": "temperature",
+  "unit": "°C",
+  "readings": [
+    {"value": 22.5, "recorded_at": "2026-03-07T14:30:00Z"},
+    {"value": 22.3, "recorded_at": "2026-03-07T14:25:00Z"}
+  ],
+  "statistics": {
+    "min": 22.3,
+    "max": 22.5,
+    "avg": 22.4,
+    "count": 2
   }
 }
 ```
 
-**Response:** `202 Accepted`
+### POST /sensors/{sensor_id}/readings
+Manually add a sensor reading (for testing).
+
+**Request:**
 ```json
 {
-  "command_id": 5678,
-  "device_id": "greenhouse_01",
-  "actuator_type": "heating",
-  "command": "on",
-  "status": "pending",
-  "created_at": "2025-01-15T15:00:00Z"
+  "value": 23.5,
+  "recorded_at": "2026-03-07T15:00:00Z"
 }
 ```
 
-**Supported Commands:**
-- `on` - Turn actuator on
-- `off` - Turn actuator off
-- `toggle` - Toggle current state
-- `set_level` - Set specific level (with parameters)
+**Response:** `201 Created`
 
-#### GET /devices/{device_id}/actuators/{actuator_type}/history
-Get actuator command history.
+---
 
-**Query Parameters:**
-- `start_time` (ISO 8601 datetime): Start of time range
-- `end_time` (ISO 8601 datetime): End of time range
-- `status` (string): Filter by status (pending, sent, confirmed, failed)
-- `limit` (integer): Number of commands (default: 100)
+## Actuators
+
+### GET /greenhouses/{greenhouse_id}/devices/{device_id}/actuators
+Get all actuators on a device.
 
 **Response:** `200 OK`
 ```json
 {
-  "device_id": "greenhouse_01",
-  "actuator_type": "heating",
-  "commands": [
+  "actuators": [
     {
-      "id": 5678,
-      "command": "on",
-      "status": "confirmed",
-      "created_at": "2025-01-15T15:00:00Z",
-      "executed_at": "2025-01-15T15:00:01Z",
-      "confirmed_at": "2025-01-15T15:00:03Z"
+      "id": 1,
+      "actuator_type": "irrigation",
+      "status": "off",
+      "last_command": {
+        "command": "off",
+        "value": null,
+        "created_at": "2026-03-07T12:00:00Z"
+      }
     },
     {
-      "id": 5677,
-      "command": "off",
-      "status": "confirmed",
-      "created_at": "2025-01-15T14:00:00Z",
-      "executed_at": "2025-01-15T14:00:01Z",
-      "confirmed_at": "2025-01-15T14:00:02Z"
-    }
-  ]
-}
-```
-
-## Dashboard & Analytics
-
-#### GET /dashboard/overview
-Get dashboard overview with current status of all devices.
-
-**Response:** `200 OK`
-```json
-{
-  "summary": {
-    "total_devices": 3,
-    "online_devices": 2,
-    "offline_devices": 1,
-    "active_alerts": 0
-  },
-  "devices": [
-    {
-      "device_id": "greenhouse_01",
-      "name": "Main Greenhouse",
-      "is_online": true,
-      "current_readings": {
-        "temperature": {"value": 22.5, "unit": "°C"},
-        "humidity": {"value": 65.0, "unit": "%"},
-        "light": {"value": 8500, "unit": "lux"}
-      },
-      "actuator_status": {
-        "lighting": "on",
-        "heating": "off",
-        "ventilation": "on",
-        "watering": "off"
+      "id": 2,
+      "actuator_type": "ventilation",
+      "status": "on",
+      "last_command": {
+        "command": "on",
+        "value": null,
+        "created_at": "2026-03-07T14:30:00Z"
       }
     }
   ]
 }
 ```
 
-#### GET /devices/{device_id}/analytics
-Get analytics and statistics for a device.
+### POST /actuators/{actuator_id}/commands
+Send a command to an actuator. The backend saves the command to `actuator_commands`, then publishes it to the MQTT topic `greenhouse/{id}/commands/{actuator_type}` for the ESP32 device.
+
+**Request:**
+```json
+{
+  "command": "set_value",
+  "value": 75.0
+}
+```
+
+**Response:** `202 Accepted`
+```json
+{
+  "id": 123,
+  "actuator_id": 1,
+  "command": "set_value",
+  "value": 75.0,
+  "created_at": "2026-03-07T15:00:00Z"
+}
+```
+
+**Supported commands:**
+- `on` — turn actuator on (value: null)
+- `off` — turn actuator off (value: null)
+- `set_value` — set specific level (value: float, e.g. intensity %)
+
+**MQTT flow:** Backend publishes → Mosquitto → ESP32 executes → ESP32 publishes status → Backend updates actuator status.
+
+### GET /actuators/{actuator_id}/commands
+Get command history for an actuator.
 
 **Query Parameters:**
-- `metric` (string): temperature, humidity, light, all
-- `period` (string): 24h, 7d, 30d, 90d
-- `aggregation` (string): hourly, daily
+- `start_time` (ISO 8601)
+- `end_time` (ISO 8601)
+- `limit` (integer, default: 100)
 
 **Response:** `200 OK`
 ```json
 {
-  "device_id": "greenhouse_01",
-  "period": "24h",
-  "metrics": {
-    "temperature": {
-      "current": 22.5,
-      "min": 18.2,
-      "max": 26.8,
-      "avg": 22.1,
-      "trend": "stable",
-      "data_points": [
-        {"timestamp": "2025-01-15T00:00:00Z", "value": 20.5},
-        {"timestamp": "2025-01-15T01:00:00Z", "value": 20.1}
-      ]
+  "actuator_id": 1,
+  "actuator_type": "irrigation",
+  "commands": [
+    {
+      "id": 123,
+      "command": "set_value",
+      "value": 75.0,
+      "created_at": "2026-03-07T15:00:00Z"
     },
-    "humidity": {
-      "current": 65.0,
-      "min": 55.0,
-      "max": 75.0,
-      "avg": 64.5,
-      "trend": "increasing"
+    {
+      "id": 122,
+      "command": "on",
+      "value": null,
+      "created_at": "2026-03-07T14:00:00Z"
     }
-  }
+  ]
 }
 ```
+
+---
+
+## Scripts
+
+### GET /greenhouses/{greenhouse_id}/scripts
+List automation scripts for a greenhouse.
+
+**Response:** `200 OK`
+```json
+{
+  "scripts": [
+    {
+      "id": 1,
+      "name": "Auto watering",
+      "enabled": true,
+      "script_code": "if soil_moisture < 40: irrigation.on()"
+    }
+  ]
+}
+```
+
+### POST /greenhouses/{greenhouse_id}/scripts
+Create a new script.
+
+**Request:**
+```json
+{
+  "name": "Night lighting off",
+  "script_code": "if hour > 22: lighting.off()",
+  "enabled": true
+}
+```
+
+**Response:** `201 Created`
+
+### PUT /scripts/{script_id}
+Update a script.
+
+### DELETE /scripts/{script_id}
+
+**Response:** `204 No Content`
+
+---
+
+## Dashboard
+
+### GET /dashboard/overview
+Get dashboard overview for the authenticated user.
+
+**Response:** `200 OK`
+```json
+{
+  "summary": {
+    "total_greenhouses": 2,
+    "total_devices": 5,
+    "online_devices": 3,
+    "offline_devices": 2
+  },
+  "greenhouses": [
+    {
+      "id": 1,
+      "name": "Main Greenhouse",
+      "devices": [
+        {
+          "id": 1,
+          "name": "Zone 1 Controller",
+          "status": "online",
+          "current_readings": {
+            "temperature": {"value": 22.5, "unit": "°C"},
+            "humidity": {"value": 65.0, "unit": "%"},
+            "light": {"value": 8500, "unit": "lux"},
+            "soil_moisture": {"value": 58.0, "unit": "%"}
+          },
+          "actuator_status": {
+            "irrigation": "off",
+            "ventilation": "on",
+            "lighting": "off",
+            "heating": "off"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## Simulator Control
+
+### POST /simulator/start
+Start the IoT device simulator.
+
+**Response:** `200 OK`
+```json
+{"status": "running", "devices_count": 3}
+```
+
+### POST /simulator/stop
+Stop the simulator.
+
+**Response:** `200 OK`
+```json
+{"status": "stopped"}
+```
+
+### GET /simulator/status
+Get simulator status.
+
+**Response:** `200 OK`
+```json
+{
+  "status": "running",
+  "uptime_seconds": 3600,
+  "devices_count": 3,
+  "readings_generated": 12500
+}
+```
+
+---
 
 ## WebSocket (Real-time Updates)
 
 ### Connection
-```javascript
-ws://localhost:8000/ws/devices/{device_id}
+```
+ws://localhost:8000/ws/greenhouse/{greenhouse_id}
 ```
 
 ### Authentication
 Send token in first message:
 ```json
-{
-  "type": "auth",
-  "token": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
+{"type": "auth", "token": "Bearer eyJhbGci..."}
 ```
 
 ### Message Types
 
-#### Sensor Update
+**Sensor Update:**
 ```json
 {
   "type": "sensor_update",
-  "device_id": "greenhouse_01",
+  "sensor_id": 1,
   "sensor_type": "temperature",
   "value": 22.5,
   "unit": "°C",
-  "timestamp": "2025-01-15T15:00:00Z"
+  "recorded_at": "2026-03-07T15:00:00Z"
 }
 ```
 
-#### Actuator Status Update
+**Actuator Status Update:**
 ```json
 {
   "type": "actuator_update",
-  "device_id": "greenhouse_01",
-  "actuator_type": "heating",
+  "actuator_id": 1,
+  "actuator_type": "irrigation",
   "status": "on",
-  "timestamp": "2025-01-15T15:00:00Z"
+  "timestamp": "2026-03-07T15:00:00Z"
 }
 ```
 
-#### Device Connection Status
+**Device Status:**
 ```json
 {
   "type": "device_status",
-  "device_id": "greenhouse_01",
-  "is_online": true,
-  "timestamp": "2025-01-15T15:00:00Z"
+  "device_id": 1,
+  "status": "online",
+  "timestamp": "2026-03-07T15:00:00Z"
 }
 ```
+
+---
 
 ## Error Responses
 
@@ -520,62 +595,47 @@ Send token in first message:
 {
   "error": {
     "code": "DEVICE_NOT_FOUND",
-    "message": "Device with ID 'greenhouse_99' not found",
-    "details": {},
-    "timestamp": "2025-01-15T15:00:00Z"
+    "message": "Device with ID 99 not found",
+    "timestamp": "2026-03-07T15:00:00Z"
   }
 }
 ```
 
 ### HTTP Status Codes
-- `200 OK` - Successful request
-- `201 Created` - Resource created
-- `202 Accepted` - Request accepted (async processing)
-- `204 No Content` - Successful deletion
-- `400 Bad Request` - Invalid request data
-- `401 Unauthorized` - Authentication required
-- `403 Forbidden` - Insufficient permissions
-- `404 Not Found` - Resource not found
-- `409 Conflict` - Resource conflict
-- `422 Unprocessable Entity` - Validation error
-- `500 Internal Server Error` - Server error
-- `503 Service Unavailable` - Service temporarily unavailable
+- `200 OK` — successful request
+- `201 Created` — resource created
+- `202 Accepted` — async processing (actuator commands)
+- `204 No Content` — successful deletion
+- `400 Bad Request` — invalid request data
+- `401 Unauthorized` — authentication required
+- `403 Forbidden` — insufficient permissions
+- `404 Not Found` — resource not found
+- `422 Unprocessable Entity` — validation error
+- `500 Internal Server Error` — server error
 
-### Common Error Codes
-- `INVALID_CREDENTIALS` - Invalid username/password
-- `TOKEN_EXPIRED` - JWT token expired
-- `DEVICE_NOT_FOUND` - Device doesn't exist
-- `DEVICE_OFFLINE` - Device not connected
-- `INVALID_COMMAND` - Unsupported actuator command
-- `VALIDATION_ERROR` - Request validation failed
-- `MQTT_ERROR` - MQTT communication error
-
-## Rate Limiting
-
-- **Default**: 100 requests per minute per IP
-- **Authenticated**: 1000 requests per minute per user
-- **WebSocket**: 100 messages per minute per connection
-
-**Headers:**
-```http
-X-RateLimit-Limit: 1000
-X-RateLimit-Remaining: 995
-X-RateLimit-Reset: 1642252800
-```
+### Error Codes
+- `INVALID_CREDENTIALS` — invalid email/password
+- `TOKEN_EXPIRED` — JWT token expired
+- `GREENHOUSE_NOT_FOUND` — greenhouse doesn't exist
+- `DEVICE_NOT_FOUND` — device doesn't exist
+- `SENSOR_NOT_FOUND` — sensor doesn't exist
+- `ACTUATOR_NOT_FOUND` — actuator doesn't exist
+- `INVALID_COMMAND` — unsupported actuator command
+- `VALIDATION_ERROR` — request validation failed
 
 ## Pagination
 
-For list endpoints, use `limit` and `offset`:
+For list endpoints:
 ```
-GET /devices?limit=20&offset=40
+GET /greenhouses?limit=20&offset=0
 ```
 
 **Response includes:**
 ```json
 {
-  "total": 150,
+  "total": 50,
   "limit": 20,
-  "offset": 40,
+  "offset": 0,
   "data": [...]
 }
 ```
@@ -583,5 +643,4 @@ GET /devices?limit=20&offset=40
 ## API Versioning
 
 - Current version: `v1`
-- Version specified in URL: `/api/v1/...`
-- Breaking changes require new version
+- Version in URL: `/api/v1/...`

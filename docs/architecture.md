@@ -1,36 +1,33 @@
-# System Architecture
+# Архитектура системы
 
-## Architecture Overview
+## Обзор
 
-The Smart Greenhouse System follows a layered architecture with clear separation between IoT devices, backend services, and frontend applications.
+Система умной теплицы построена по многослойной архитектуре с чётким разделением между IoT-устройствами, MQTT-брокером, бэкендом и фронтендом.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         User Layer                           │
-│                     (Web Browser)                            │
+│                    Пользователь (Браузер)                    │
 └──────────────────────────┬──────────────────────────────────┘
-                           │ HTTPS/REST
+                           │ HTTPS
 ┌──────────────────────────▼──────────────────────────────────┐
-│                    Frontend Layer                            │
-│                  React + TypeScript                          │
-│                    (Docker Container)                        │
+│                    Фронтенд (React + TS)                    │
+│                     (Docker-контейнер)                       │
 └──────────────────────────┬──────────────────────────────────┘
-                           │ REST API
+                           │ REST API + WebSocket
 ┌──────────────────────────▼──────────────────────────────────┐
-│                    Backend Layer                             │
-│                  FastAPI + Python                            │
-│                    (Docker Container)                        │
-│  ┌──────────────────────────────────────────────────┐       │
-│  │  REST API Server  │  MQTT Client (Paho-MQTT)     │       │
-│  └──────────────────────────────────────────────────┘       │
+│                    Бэкенд (FastAPI + Python)                 │
+│                     (Docker-контейнер)                       │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  REST API  │  WebSocket  │  MQTT-клиент (Paho-MQTT)  │   │
+│  └──────────────────────────────────────────────────────┘   │
 └──────┬────────────────────────────────────┬─────────────────┘
        │                                    │ MQTT
        │ SQL                                │
 ┌──────▼────────┐              ┌───────────▼─────────────────┐
-│  PostgreSQL   │              │    MQTT Broker              │
-│   Database    │              │  (Eclipse Mosquitto)        │
-│   (Docker)    │              │    (Docker Container)       │
-└───────────────┘              └───────────┬─────────────────┘
+│  PostgreSQL   │              │    MQTT-брокер              │
+│   (Docker)    │              │  (Eclipse Mosquitto)        │
+└───────────────┘              │    (Docker-контейнер)       │
+                               └───────────┬─────────────────┘
                                            │ MQTT
                            ┌───────────────┼───────────────┐
                            │               │               │
@@ -41,201 +38,203 @@ The Smart Greenhouse System follows a layered architecture with clear separation
                     └─────────────┘ └────────────┘ └────────────┘
 ```
 
-## Component Responsibilities
+## Компоненты
 
-### 1. Frontend (React + TypeScript)
-**Responsibilities:**
-- User interface for monitoring sensor data
-- Control panel for actuators
-- Device management
-- Real-time data visualization
-- User authentication UI
+### 1. Фронтенд (React + TypeScript)
 
-**Technology Stack:**
-- React 18+
-- TypeScript
-- REST API client (axios/fetch)
-- State management (React Context/Redux)
-- Charts library (recharts/chart.js)
+**Ответственность:**
+- Интерфейс мониторинга данных с датчиков
+- Панель управления актуаторами
+- Управление теплицами и устройствами
+- Визуализация данных в реальном времени
+- Аутентификация пользователей
 
-**Deployment:**
-- Dockerized container
-- Nginx for serving static files
-- Environment-based configuration
+**Технологии:**
+- React 18+, TypeScript
+- REST API-клиент (axios/fetch)
+- WebSocket-клиент для real-time обновлений
+- Библиотека графиков (recharts/chart.js)
 
-### 2. Backend (FastAPI + Python)
-**Responsibilities:**
-- RESTful API endpoints
-- MQTT message handling (pub/sub)
-- Business logic
-- Data persistence
-- Authentication & authorization
-- WebSocket support (optional for real-time updates)
+**Деплой:**
+- Docker-контейнер с Nginx
 
-**Technology Stack:**
+### 2. Бэкенд (FastAPI + Python)
+
+**Ответственность:**
+- RESTful API-эндпоинты
+- WebSocket-сервер для real-time обновлений
+- MQTT-клиент для связи с IoT-устройствами
+- Бизнес-логика
+- Хранение данных
+- Аутентификация и авторизация
+
+**Технологии:**
 - FastAPI (Python 3.11+)
-- Paho-MQTT client
-- SQLAlchemy ORM
-- Pydantic for data validation
-- Alembic for migrations
-- PostgreSQL driver (psycopg2)
+- Paho-MQTT (MQTT-клиент)
+- SQLAlchemy 2.0 ORM
+- Pydantic v2 для валидации
+- Alembic для миграций
+- psycopg2 (PostgreSQL-драйвер)
 
-**Key Modules:**
-- `api/` - REST endpoints
-- `mqtt/` - MQTT client and message handlers
-- `models/` - Database models
-- `schemas/` - Pydantic schemas
-- `services/` - Business logic
-- `core/` - Configuration and utilities
+**Структура модулей:**
+```
+backend/app/
+  ├── routes/          # REST-эндпоинты
+  ├── mqtt/            # MQTT-клиент и обработчики сообщений
+  │     ├── client.py
+  │     ├── topics.py
+  │     └── handlers.py
+  ├── models.py        # Модели SQLAlchemy
+  ├── schemas.py       # Pydantic-схемы
+  ├── services.py      # Бизнес-логика
+  ├── dependencies.py  # Зависимости FastAPI
+  ├── config.py        # Конфигурация
+  ├── database.py      # Подключение к БД
+  └── simulator/       # Программный эмулятор (опционально)
+        ├── engine.py
+        ├── devices.py
+        ├── sensors/
+        └── actuators/
+```
 
-### 3. MQTT Broker (Eclipse Mosquitto)
-**Responsibilities:**
-- Message routing between backend and IoT devices
-- Topic-based message distribution
-- QoS management
-- Retained messages for device status
+### 3. MQTT-брокер (Eclipse Mosquitto)
 
-**Configuration:**
-- Port: 1883 (MQTT), 9001 (WebSocket - optional)
-- Authentication: Username/password
-- ACL for topic access control
+**Ответственность:**
+- Маршрутизация сообщений между бэкендом и IoT-устройствами
+- Топик-ориентированная доставка сообщений
+- Управление QoS
+- Retained-сообщения для статусов устройств
 
-### 4. Database (PostgreSQL)
-**Responsibilities:**
-- Persistent storage for:
-  - Device information
-  - Sensor readings history
-  - Actuator commands history
-  - User accounts
-  - Configuration settings
+**Конфигурация:**
+- Порт: 1883 (MQTT), 9001 (WebSocket — опционально)
+- Аутентификация: логин/пароль
+- ACL для контроля доступа к топикам
 
-**Schema Design:**
-- Normalized relational model
-- Time-series optimization for sensor data
-- Indexes for performance
+### 4. IoT-устройства (ESP32 + Wokwi)
 
-### 5. IoT Devices (ESP32)
-**Responsibilities:**
-- Sensor data collection
-- Actuator control
-- MQTT communication
-- Local processing
+**Ответственность:**
+- Сбор данных с датчиков
+- Управление актуаторами
+- MQTT-коммуникация с бэкендом
+- Локальная обработка
 
-**Development:**
-- Wokwi simulator for development/testing
+**Разработка:**
+- Wokwi-симулятор для разработки и тестирования
 - C/C++ (Arduino framework)
-- WiFi connectivity
-- MQTT client library
+- WiFi-подключение
+- MQTT-клиент (PubSubClient)
 
-## Communication Patterns
+### 5. База данных (PostgreSQL)
 
-### 1. Frontend ↔ Backend (REST API)
-- **Protocol**: HTTPS
-- **Format**: JSON
-- **Authentication**: JWT tokens
-- **Endpoints**: See API specification
+**Ответственность:**
+- Хранение пользователей, теплиц, устройств
+- Справочники типов датчиков и актуаторов
+- Таймсерии показаний датчиков
+- Журнал команд актуаторов
+- Скрипты автоматизации
 
-### 2. Backend ↔ MQTT Broker
-- **Protocol**: MQTT v3.1.1/v5.0
-- **QoS Levels**:
-  - Sensor data: QoS 0 (at most once) - acceptable for frequent readings
-  - Commands: QoS 1 (at least once) - ensure delivery
-  - Status: QoS 1 (at least once)
+**Схема:** нормализованная реляционная модель с иерархией:
+`users → greenhouses → devices → sensors/actuators → readings/commands`
 
-### 3. MQTT Broker ↔ IoT Devices
-- **Protocol**: MQTT over WiFi
-- **Reconnection**: Automatic with exponential backoff
-- **Last Will**: Device disconnection notifications
+Подробнее: [database_design.md](database_design.md)
 
-## Data Flow Examples
+### 6. Программный эмулятор (опционально)
 
-### Sensor Reading Flow
-1. ESP32 reads sensor (e.g., temperature = 25.5°C)
-2. ESP32 publishes to `devices/greenhouse_01/sensors/temperature`
-3. Backend subscribes and receives message
-4. Backend stores reading in PostgreSQL
-5. Frontend polls/receives real-time update via REST/WebSocket
+Дополнительный инструмент для разработки и тестирования без Wokwi. Работает как asyncio background task внутри FastAPI, генерирует реалистичные данные по математическим моделям и записывает в БД напрямую.
 
-### Actuator Command Flow
-1. User clicks "Turn on heating" in frontend
-2. Frontend sends POST to `/api/devices/{id}/actuators/heating`
-3. Backend validates command
-4. Backend publishes to `devices/greenhouse_01/commands/heating` with payload `{"state": "on"}`
-5. ESP32 receives command and activates heating
-6. ESP32 publishes status to `devices/greenhouse_01/status/heating` with payload `{"state": "on", "timestamp": "..."}`
-7. Backend receives status confirmation
-8. Backend updates database and notifies frontend
+Подробнее: [iot_device_emulation.md](iot_device_emulation.md)
 
-## Deployment Architecture
+## Паттерны коммуникации
 
-### Docker Compose Services
+### 1. Фронтенд ↔ Бэкенд
+
+| Канал | Протокол | Назначение |
+|---|---|---|
+| REST API | HTTPS + JSON | CRUD, команды, исторические данные |
+| WebSocket | WSS | Real-time обновления датчиков и статусов |
+| Аутентификация | JWT | Bearer-токен в заголовке Authorization |
+
+### 2. Бэкенд ↔ MQTT-брокер
+
+- **Протокол**: MQTT v3.1.1/v5.0
+- **QoS**:
+  - Данные датчиков: QoS 0 (at most once) — допустимо для частых показаний
+  - Команды: QoS 1 (at least once) — гарантия доставки
+  - Статусы: QoS 1 (at least once)
+
+### 3. MQTT-брокер ↔ IoT-устройства
+
+- **Протокол**: MQTT over WiFi
+- **Реконнект**: автоматический с экспоненциальным backoff
+- **Last Will**: уведомление об отключении устройства
+
+## Потоки данных
+
+### Поток показаний датчиков
+1. ESP32 считывает показание с датчика (напр. температура = 22.5 °C)
+2. ESP32 публикует в топик `greenhouse/{id}/sensors/temperature`
+3. Бэкенд подписан — получает сообщение через MQTT-клиент
+4. Бэкенд сохраняет показание в `sensor_readings`
+5. WebSocket уведомляет фронтенд о новом показании
+
+### Поток команд актуаторов
+1. Пользователь нажимает «Включить полив» на фронтенде
+2. Фронтенд отправляет POST на `/api/v1/actuators/{id}/commands`
+3. Бэкенд создаёт запись в `actuator_commands`
+4. Бэкенд публикует команду в `greenhouse/{id}/commands/irrigation`
+5. ESP32 получает команду и включает полив
+6. ESP32 публикует статус в `greenhouse/{id}/status/irrigation`
+7. Бэкенд получает подтверждение, обновляет БД
+8. WebSocket уведомляет фронтенд
+
+## Деплой
+
+### Docker Compose
+
 ```yaml
 services:
   postgres:
-    - Persistent storage for application data
+    image: postgres:16
+    volumes:
+      - pgdata:/var/lib/postgresql/data
 
   mosquitto:
-    - MQTT broker
-    - Depends on: none
+    image: eclipse-mosquitto:2
+    ports: ["1883:1883"]
 
   backend:
-    - FastAPI application
-    - Depends on: postgres, mosquitto
+    build: ./backend
+    depends_on: [postgres, mosquitto]
+    ports: ["8000:8000"]
 
   frontend:
-    - React application (Nginx)
-    - Depends on: backend
+    build: ./frontend
+    depends_on: [backend]
+    ports: ["80:80"]
 ```
 
-### Network Configuration
-- Frontend: Port 80/443 (exposed)
-- Backend: Port 8000 (internal + exposed for dev)
-- Mosquitto: Port 1883 (exposed for IoT)
-- PostgreSQL: Port 5432 (internal only)
+### Сетевая конфигурация
+- Фронтенд: порт 80/443 (внешний)
+- Бэкенд: порт 8000 (внешний для разработки)
+- Mosquitto: порт 1883 (внешний — для IoT-устройств)
+- PostgreSQL: порт 5432 (только внутренний)
 
-## Scalability Considerations
+## Безопасность
 
-### Horizontal Scaling
-- **Backend**: Stateless design allows multiple instances
-- **MQTT Broker**: Clustering for high availability
-- **Database**: Read replicas for queries
+### Аутентификация и авторизация
+- JWT-токены для доступа к API
+- MQTT логин/пароль для устройств
+- Хеширование паролей (bcrypt/argon2)
+- Привязка данных к пользователю (user → greenhouses → ...)
 
-### Vertical Scaling
-- Optimize sensor data storage (time-series DB alternative)
-- Caching layer (Redis) for frequent queries
-- Message queue for async processing
+### Защита данных
+- Валидация входных данных (Pydantic)
+- Защита от SQL-инъекций (ORM)
+- CORS-настройка для фронтенда
+- MQTT ACL для контроля топиков
 
-## Security
+## Масштабирование (на будущее)
 
-### Authentication & Authorization
-- JWT tokens for API access
-- MQTT username/password authentication
-- Device-specific credentials
-
-### Network Security
-- TLS/SSL for MQTT (production)
-- HTTPS for frontend-backend
-- Firewall rules for Docker network
-
-### Data Security
-- Input validation (Pydantic)
-- SQL injection prevention (ORM)
-- MQTT topic ACLs
-
-## Monitoring & Logging
-
-### Logging
-- Structured logging (JSON format)
-- Log levels: DEBUG, INFO, WARNING, ERROR
-- Centralized log aggregation
-
-### Metrics
-- Device connectivity status
-- Message throughput
-- API response times
-- Database performance
-
-### Alerting
-- Device offline notifications
-- Sensor threshold violations
-- System health checks
+- **Горизонтальное**: stateless-бэкенд, read-реплики БД
+- **Вертикальное**: TimescaleDB для таймсерий, Redis для кеширования
+- **MQTT**: кластеризация брокера (EMQX/HiveMQ)
