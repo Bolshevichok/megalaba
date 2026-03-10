@@ -172,7 +172,7 @@ backend/app/
 
 ### Поток показаний датчиков
 1. ESP32 считывает показание с датчика (напр. температура = 22.5 °C)
-2. ESP32 публикует в топик `greenhouse/{id}/sensors/temperature`
+2. ESP32 публикует в топик `devices/{device_id}/sensors/temperature`
 3. Бэкенд подписан — получает сообщение через MQTT-клиент
 4. Бэкенд сохраняет показание в `sensor_readings`
 5. WebSocket уведомляет фронтенд о новом показании
@@ -181,9 +181,9 @@ backend/app/
 1. Пользователь нажимает «Включить полив» на фронтенде
 2. Фронтенд отправляет POST на `/api/v1/actuators/{id}/commands`
 3. Бэкенд создаёт запись в `actuator_commands`
-4. Бэкенд публикует команду в `greenhouse/{id}/commands/irrigation`
+4. Бэкенд публикует команду в `devices/{device_id}/commands/watering`
 5. ESP32 получает команду и включает полив
-6. ESP32 публикует статус в `greenhouse/{id}/status/irrigation`
+6. ESP32 публикует статус в `devices/{device_id}/status/watering`
 7. Бэкенд получает подтверждение, обновляет БД
 8. WebSocket уведомляет фронтенд
 

@@ -59,14 +59,22 @@
 
 ## MQTT-топики
 
-### Данные датчиков (ESP32 → Бэкенд)
-- `greenhouse/{greenhouse_id}/sensors/{sensor_type}`
+### 1. Данные с датчиков (публикует ESP32, подписывается Backend)
+- `devices/{device_id}/sensors/light` — данные об освещённости
+- `devices/{device_id}/sensors/temperature` — данные о температуре
+- `devices/{device_id}/sensors/humidity` — данные о влажности почвы/воздуха
 
-### Команды актуаторов (Бэкенд → ESP32)
-- `greenhouse/{greenhouse_id}/commands/{actuator_type}`
+### 2. Команды управления (публикует Backend, подписывается ESP32)
+- `devices/{device_id}/commands/lighting` — управление освещением
+- `devices/{device_id}/commands/heating` — управление подогревом
+- `devices/{device_id}/commands/ventilation` — управление проветриванием
+- `devices/{device_id}/commands/watering` — управление поливом
 
-### Статусы (ESP32 → Бэкенд)
-- `greenhouse/{greenhouse_id}/status/{actuator_type}`
+### 3. Статусы актуаторов (публикует ESP32, подписывается Backend)
+- `devices/{device_id}/status/lighting` — текущее состояние освещения
+- `devices/{device_id}/status/heating` — текущее состояние подогрева
+- `devices/{device_id}/status/ventilation` — текущее состояние проветривания
+- `devices/{device_id}/status/watering` — текущее состояние полива
 
 ## Поток данных
 

@@ -1,92 +1,150 @@
-# Data Model: Backend API Foundation
+# Data Model: Backend API — Умная Теплица
 
-**Source**: `docs/database_design.md`
+**Source**: `db_create.sql` + Constitution gaps (R6, R7 from research.md)
+
+## ENUM Types
+
+| Enum | Values |
+|---|---|
+| `connection_type_enum` | wifi, gsm, ethernet, zigbee |
+| `device_status_enum` | online, offline |
+| `actuator_status_enum` | on, off |
+| `command_enum` | on, off, set_value |
 
 ## Entities
 
 ### User
-
 | Field | Type | Constraints |
-|-------|------|-------------|
-| id | Serial PK | auto-increment |
-| username | VARCHAR(50) | UNIQUE, NOT NULL |
+|---|---|---|
+| id | SERIAL | PK |
+| name | VARCHAR(100) | NOT NULL |
 | email | VARCHAR(255) | UNIQUE, NOT NULL |
 | password_hash | VARCHAR(255) | NOT NULL |
-| is_active | BOOLEAN | DEFAULT true |
-| is_superuser | BOOLEAN | DEFAULT false |
-| created_at | TIMESTAMPTZ | DEFAULT CURRENT_TIMESTAMP |
-| updated_at | TIMESTAMPTZ | DEFAULT CURRENT_TIMESTAMP |
+| billing_address | TEXT | nullable |
+| phone | VARCHAR(20) | nullable |
 
-**Indexes**: username, email
+### Greenhouse
+| Field | Type | Constraints |
+|---|---|---|
+| id | SERIAL | PK |
+| user_id | INTEGER | FK → users.id, ON DELETE CASCADE, NOT NULL |
+| name | VARCHAR(100) | nullable |
+| location | VARCHAR(255) | nullable |
 
 ### Device
-
 | Field | Type | Constraints |
-|-------|------|-------------|
-| id | Serial PK | auto-increment |
-| device_id | VARCHAR(100) | UNIQUE, NOT NULL |
-| name | VARCHAR(255) | NOT NULL |
-| description | TEXT | nullable |
-| location | VARCHAR(255) | nullable |
-| device_type | VARCHAR(50) | DEFAULT 'greenhouse' |
-| is_active | BOOLEAN | DEFAULT true |
-| is_online | BOOLEAN | DEFAULT false |
-| last_seen | TIMESTAMPTZ | nullable |
-| mqtt_client_id | VARCHAR(100) | nullable |
-| config | JSONB | nullable |
-| created_at | TIMESTAMPTZ | DEFAULT CURRENT_TIMESTAMP |
-| updated_at | TIMESTAMPTZ | DEFAULT CURRENT_TIMESTAMP |
+|---|---|---|
+| id | SERIAL | PK |
+| greenhouse_id | INTEGER | FK → greenhouses.id, ON DELETE CASCADE, NOT NULL |
+| name | VARCHAR(100) | nullable |
+| connection_type | connection_type_enum | nullable |
+| ip_address | VARCHAR(50) | nullable |
+| status | device_status_enum | nullable |
+| last_seen | TIMESTAMPTZ | nullable *(Constitution VIII — added via migration)* |
 
-**Indexes**: device_id, is_active, is_online
+### SensorType
+| Field | Type | Constraints |
+|---|---|---|
+| id | SERIAL | PK |
+| name | VARCHAR(50) | nullable |
+
+**Seed data**: temperature, humidity, light
+
+### Sensor
+| Field | Type | Constraints |
+|---|---|---|
+| id | SERIAL | PK |
+| device_id | INTEGER | FK → devices.id, ON DELETE CASCADE, NOT NULL |
+| sensor_type_id | INTEGER | FK → sensor_types.id, NOT NULL |
+| name | VARCHAR(100) | nullable |
+| unit | VARCHAR(20) | nullable |
 
 ### SensorReading
-
 | Field | Type | Constraints |
-|-------|------|-------------|
-| id | BigSerial PK | auto-increment |
-| device_id | INTEGER FK | NOT NULL, references devices(id) ON DELETE CASCADE |
-| sensor_type | VARCHAR(50) | NOT NULL; enum: temperature, humidity, light |
-| value | NUMERIC(10,2) | NOT NULL |
-| unit | VARCHAR(20) | NOT NULL; °C, %, lux |
-| raw_data | JSONB | nullable |
-| timestamp | TIMESTAMPTZ | DEFAULT CURRENT_TIMESTAMP |
+|---|---|---|
+| id | SERIAL | PK |
+| sensor_id | INTEGER | FK → sensors.id, ON DELETE CASCADE, NOT NULL |
+| value | FLOAT | nullable |
+| recorded_at | TIMESTAMPTZ | DEFAULT CURRENT_TIMESTAMP |
 
-**Indexes**: device_id, sensor_type, timestamp DESC,
-composite (device_id, sensor_type, timestamp DESC)
+**Index**: (sensor_id, recorded_at DESC) — для быстрых запросов истории
+
+### ActuatorType
+| Field | Type | Constraints |
+|---|---|---|
+| id | SERIAL | PK |
+| name | VARCHAR(50) | nullable |
+
+**Seed data**: lighting, heating, ventilation, watering
+
+### Actuator
+| Field | Type | Constraints |
+|---|---|---|
+| id | SERIAL | PK |
+| device_id | INTEGER | FK → devices.id, ON DELETE CASCADE, NOT NULL |
+| actuator_type_id | INTEGER | FK → actuator_types.id, NOT NULL |
+| status | actuator_status_enum | nullable |
 
 ### ActuatorCommand
-
 | Field | Type | Constraints |
-|-------|------|-------------|
-| id | BigSerial PK | auto-increment |
-| device_id | INTEGER FK | NOT NULL, references devices(id) ON DELETE CASCADE |
-| actuator_type | VARCHAR(50) | NOT NULL; enum: lighting, heating, ventilation, watering |
-| command | VARCHAR(50) | NOT NULL; on, off, toggle, set_level |
-| parameters | JSONB | nullable |
-| status | VARCHAR(20) | DEFAULT 'pending'; enum: pending, sent, confirmed, failed |
-| error_message | TEXT | nullable |
+|---|---|---|
+| id | SERIAL | PK |
+| actuator_id | INTEGER | FK → actuators.id, ON DELETE CASCADE, NOT NULL |
+| command | command_enum | NOT NULL |
+| value | FLOAT | nullable |
+| status | VARCHAR(20) | DEFAULT 'pending' *(Constitution IV — added via migration)* |
 | created_at | TIMESTAMPTZ | DEFAULT CURRENT_TIMESTAMP |
-| executed_at | TIMESTAMPTZ | nullable |
-| confirmed_at | TIMESTAMPTZ | nullable |
 
-**Indexes**: device_id, status, created_at DESC
+**Lifecycle**: pending → sent → confirmed | failed
 
-## State Transitions
-
-### ActuatorCommand.status
-
-```
-pending → sent → confirmed
-                → failed
-```
-
-- `pending`: команда создана через API
-- `sent`: опубликована в MQTT (вне скоупа этой фичи)
-- `confirmed`: устройство подтвердило выполнение
-- `failed`: ошибка на устройстве или таймаут
+### Script
+| Field | Type | Constraints |
+|---|---|---|
+| id | SERIAL | PK |
+| greenhouse_id | INTEGER | FK → greenhouses.id, ON DELETE CASCADE, NOT NULL |
+| name | VARCHAR(100) | nullable |
+| script_code | TEXT | nullable |
+| enabled | BOOLEAN | DEFAULT TRUE |
 
 ## Relationships
 
-- Device → SensorReading: 1:N (CASCADE delete)
-- Device → ActuatorCommand: 1:N (CASCADE delete)
-- User: standalone (нет FK к другим сущностям в MVP)
+```
+User (1) ──→ (N) Greenhouse
+Greenhouse (1) ──→ (N) Device
+Greenhouse (1) ──→ (N) Script
+Device (1) ──→ (N) Sensor
+Device (1) ──→ (N) Actuator
+Sensor (N) ──→ (1) SensorType
+Sensor (1) ──→ (N) SensorReading
+Actuator (N) ──→ (1) ActuatorType
+Actuator (1) ──→ (N) ActuatorCommand
+```
+
+## State Transitions
+
+### Device Status
+```
+(created) → offline
+offline → online  [MQTT message received from device]
+online → offline  [LWT received OR last_seen > 60s]
+```
+
+### Actuator Status
+```
+off → on   [command "on" confirmed]
+on → off   [command "off" confirmed]
+```
+
+### ActuatorCommand Lifecycle
+```
+pending → sent       [published to MQTT]
+sent → confirmed     [status message from ESP32]
+sent → failed        [timeout 30s without confirmation]
+```
+
+## Differences from db_create.sql
+
+Two columns added via Alembic migration to satisfy Constitution:
+
+1. `devices.last_seen` (TIMESTAMPTZ, nullable) — Constitution VIII: Device Resilience
+2. `actuator_commands.status` (VARCHAR(20), DEFAULT 'pending') — Constitution IV: Data Integrity

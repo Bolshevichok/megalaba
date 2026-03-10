@@ -359,7 +359,7 @@ Get all actuators on a device.
 ```
 
 ### POST /actuators/{actuator_id}/commands
-Send a command to an actuator. The backend saves the command to `actuator_commands`, then publishes it to the MQTT topic `greenhouse/{id}/commands/{actuator_type}` for the ESP32 device.
+Send a command to an actuator. The backend saves the command to `actuator_commands`, then publishes it to the MQTT topic `devices/{device_id}/commands/{actuator_type}` for the ESP32 device.
 
 **Request:**
 ```json
@@ -385,7 +385,7 @@ Send a command to an actuator. The backend saves the command to `actuator_comman
 - `off` — turn actuator off (value: null)
 - `set_value` — set specific level (value: float, e.g. intensity %)
 
-**MQTT flow:** Backend publishes → Mosquitto → ESP32 executes → ESP32 publishes status → Backend updates actuator status.
+**MQTT flow:** Backend publishes to `devices/{device_id}/commands/{type}` → Mosquitto → ESP32 executes → ESP32 publishes status to `devices/{device_id}/status/{type}` → Backend updates actuator status.
 
 ### GET /actuators/{actuator_id}/commands
 Get command history for an actuator.

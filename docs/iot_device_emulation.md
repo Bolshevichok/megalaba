@@ -282,7 +282,7 @@ CO2(t) = CO2_base + ventilation_effect + plant_cycle + noise
 
 - Брокер: [Mosquitto](https://mosquitto.org/) (в Docker)
 - Python-клиент: [paho-mqtt](https://pypi.org/project/paho-mqtt/)
-- Топики: `greenhouse/{id}/sensors/{type}`, `greenhouse/{id}/commands/{type}`
+- Топики: `devices/{device_id}/sensors/{type}`, `devices/{device_id}/commands/{type}`, `devices/{device_id}/status/{type}`
 
 Программный эмулятор обходит MQTT и пишет напрямую в БД — это проще для разработки, но не заменяет полную MQTT-архитектуру.
 

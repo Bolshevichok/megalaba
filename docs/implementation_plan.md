@@ -131,8 +131,8 @@ megalaba/
 - Сохранение показаний в БД
 
 **Критерии приёмки:**
-- [ ] Подписка на `greenhouse/+/sensors/#`
-- [ ] Подписка на `greenhouse/+/status/#`
+- [ ] Подписка на `devices/+/sensors/#`
+- [ ] Подписка на `devices/+/status/#`
 - [ ] JSON-сообщения парсятся и валидируются
 - [ ] Показания сохраняются в `sensor_readings`
 - [ ] Статусы актуаторов обновляются
@@ -200,7 +200,7 @@ megalaba/
 - [ ] GET `/greenhouses/{id}/devices/{id}/actuators` — актуаторы со статусами
 - [ ] POST `/actuators/{id}/commands` — отправка команды (on, off, set_value)
 - [ ] GET `/actuators/{id}/commands` — история команд
-- [ ] Команда публикуется в MQTT-топик `greenhouse/{id}/commands/{type}`
+- [ ] Команда публикуется в MQTT-топик `devices/{device_id}/commands/{type}`
 - [ ] Статус обновляется при получении подтверждения из MQTT
 
 ---
@@ -345,7 +345,7 @@ megalaba/
 **Критерии приёмки:**
 - [ ] Виртуальные датчики настроены в Wokwi (DHT22, фоторезистор и т.д.)
 - [ ] Показания считываются каждые 5 секунд
-- [ ] Данные публикуются в MQTT-топики `greenhouse/{id}/sensors/{type}`
+- [ ] Данные публикуются в MQTT-топики `devices/{device_id}/sensors/{type}`
 - [ ] Формат: JSON (`{"value": 22.5, "unit": "°C"}`)
 
 **Файлы:**
@@ -358,10 +358,10 @@ megalaba/
 **Приоритет:** P1 | **Зависит от:** ЗАДАЧА 22
 
 **Критерии приёмки:**
-- [ ] Подписка на `greenhouse/{id}/commands/#`
+- [ ] Подписка на `devices/{device_id}/commands/#`
 - [ ] Парсинг команд из JSON
 - [ ] Управление LED/реле (представляют актуаторы)
-- [ ] Публикация статуса в `greenhouse/{id}/status/{type}`
+- [ ] Публикация статуса в `devices/{device_id}/status/{type}`
 
 **Файлы:**
 - `iot/src/actuators.h / actuators.cpp`

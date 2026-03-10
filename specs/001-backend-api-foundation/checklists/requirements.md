@@ -1,7 +1,7 @@
-# Specification Quality Checklist: Backend API Foundation
+# Specification Quality Checklist: Backend API — Умная Теплица
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-03-04
+**Created**: 2026-03-10
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,9 +31,9 @@
 
 ## Notes
 
-- Spec references `docs/database_design.md` and `docs/api_specification.md`
-  as authoritative sources — ORM models and routes MUST conform to those docs.
-- SC-005 (max 15 source files) reflects user's explicit request for minimal
-  folder structure. This constraint is intentional.
-- No [NEEDS CLARIFICATION] markers — all decisions were resolvable from
-  existing project docs and user input.
+- Full backend scope: REST API + MQTT client + WebSocket + IoT emulator + Docker
+- Mosquitto included in Docker Compose alongside PostgreSQL and backend
+- MQTT topics and QoS levels documented in assumptions
+- Frontend explicitly out of scope — separate feature
+- 11 user stories, 28 functional requirements, 11 success criteria
+- All 10 DB entities covered with correct relationships matching `db_create.sql`
