@@ -31,11 +31,8 @@ CREATE TYPE command_enum AS ENUM (
 
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    billing_address TEXT,
-    phone VARCHAR(20)
+    name VARCHAR(100),
+    password VARCHAR(255)
 );
 
 -- =========================
@@ -106,7 +103,7 @@ CREATE TABLE sensor_readings (
     id SERIAL PRIMARY KEY,
     sensor_id INTEGER NOT NULL,
     value FLOAT,
-    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    recorded_at TIMESTAMP,
 
     FOREIGN KEY (sensor_id)
         REFERENCES sensors(id)
@@ -147,9 +144,8 @@ CREATE TABLE actuators (
 CREATE TABLE actuator_commands (
     id SERIAL PRIMARY KEY,
     actuator_id INTEGER NOT NULL,
-    command command_enum NOT NULL,
+    command command_enum,
     value FLOAT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (actuator_id)
         REFERENCES actuators(id)
