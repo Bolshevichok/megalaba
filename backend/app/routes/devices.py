@@ -127,9 +127,11 @@ def create_device(
 ) -> Device:
     """Create a new device in a greenhouse.
 
+    Automatically provisions sensors and actuators based on device_type.
+
     Args:
         greenhouse_id: The parent greenhouse ID.
-        device_in: Device creation payload.
+        device_in: Device creation payload (must include device_type).
         db: Database session.
         current_user: The authenticated user.
 
@@ -138,8 +140,15 @@ def create_device(
     """
     greenhouse = _get_greenhouse_or_404(greenhouse_id, current_user, db)
 
-    device = Device(greenhouse_id=greenhouse.id, **device_in.model_dump())
+    data = device_in.model_dump()
+    device_type = data.pop("device_type")
+
+    device = Device(greenhouse_id=greenhouse.id, **data)
     db.add(device)
+    db.flush()  # get device.id without committing
+
+    device.provision_by_type(device_type, db)
+
     db.commit()
     db.refresh(device)
     return device

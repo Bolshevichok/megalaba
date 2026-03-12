@@ -151,11 +151,13 @@ class DeviceCreate(BaseModel):
 
     Attributes:
         name: Device name.
+        device_type: Template type (climate-sensor/light-controller/full-greenhouse).
         connection_type: Connection type (wifi/gsm/ethernet/zigbee).
         ip_address: Optional IP address.
     """
 
     name: str = Field(..., max_length=100)
+    device_type: str = Field(..., pattern="^(climate-sensor|light-controller|full-greenhouse)$")
     connection_type: str | None = None
     ip_address: str | None = None
 
@@ -208,6 +210,31 @@ class DeviceListResponse(BaseModel):
 
     total: int
     devices: list[DeviceResponse]
+
+
+# --- Device Type ---
+
+
+class DeviceTypeSensorInfo(BaseModel):
+    """Sensor spec within a device type template."""
+
+    type: str
+    unit: str
+
+
+class DeviceTypeActuatorInfo(BaseModel):
+    """Actuator spec within a device type template."""
+
+    type: str
+
+
+class DeviceTypeResponse(BaseModel):
+    """Schema for a single device type template."""
+
+    name: str
+    description: str
+    sensors: list[DeviceTypeSensorInfo]
+    actuators: list[DeviceTypeActuatorInfo]
 
 
 # --- Sensor ---

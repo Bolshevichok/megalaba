@@ -19,9 +19,33 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Session, relationship
 
 from app.database import Base
+
+
+# ── Device type templates ──────────────────────────────────────
+# Each type defines which sensors and actuators are auto-created.
+# sensor entries: (sensor_type_name, unit)
+# actuator entries: (actuator_type_name,)
+
+DEVICE_TYPE_TEMPLATES: dict[str, dict] = {
+    "climate-sensor": {
+        "description": "DHT22 — temperature + humidity",
+        "sensors": [("temperature", "°C"), ("humidity", "%")],
+        "actuators": [],
+    },
+    "light-controller": {
+        "description": "LDR + LED — light sensing and control",
+        "sensors": [("light", "lux")],
+        "actuators": [("lighting",)],
+    },
+    "full-greenhouse": {
+        "description": "DHT22 + LDR + LED — all sensors and actuators",
+        "sensors": [("temperature", "°C"), ("humidity", "%"), ("light", "lux")],
+        "actuators": [("lighting",)],
+    },
+}
 
 
 class ConnectionType(str, enum.Enum):
@@ -134,6 +158,36 @@ class Device(Base):
     greenhouse = relationship("Greenhouse", back_populates="devices")
     sensors = relationship("Sensor", back_populates="device", cascade="all, delete-orphan")
     actuators = relationship("Actuator", back_populates="device", cascade="all, delete-orphan")
+
+    def provision_by_type(self, device_type: str, db: Session) -> None:
+        """Create sensors and actuators according to the device type template.
+
+        Args:
+            device_type: Key from DEVICE_TYPE_TEMPLATES.
+            db: Active database session (caller is responsible for commit).
+
+        Raises:
+            ValueError: If device_type is unknown.
+        """
+        template = DEVICE_TYPE_TEMPLATES.get(device_type)
+        if template is None:
+            raise ValueError(f"Unknown device type: {device_type}")
+
+        # Build name->id lookup for sensor/actuator types
+        sensor_type_map = {st.name: st.id for st in db.query(SensorType).all()}
+        actuator_type_map = {at.name: at.id for at in db.query(ActuatorType).all()}
+
+        for type_name, unit in template["sensors"]:
+            type_id = sensor_type_map.get(type_name)
+            if type_id is None:
+                continue
+            db.add(Sensor(device_id=self.id, sensor_type_id=type_id, unit=unit))
+
+        for (type_name,) in template["actuators"]:
+            type_id = actuator_type_map.get(type_name)
+            if type_id is None:
+                continue
+            db.add(Actuator(device_id=self.id, actuator_type_id=type_id, status=ActuatorStatus.off))
 
 
 class SensorType(Base):

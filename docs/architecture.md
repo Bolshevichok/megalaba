@@ -233,6 +233,39 @@ services:
 - CORS-настройка для фронтенда
 - MQTT ACL для контроля топиков
 
+## Реализация: типы устройств и auto-provisioning
+
+### DEVICE_TYPE_TEMPLATES (models.py)
+
+Словарь-конфиг, определяющий какие сенсоры/актуаторы создаются для каждого типа устройства:
+
+| Тип | Сенсоры | Актуаторы | Wokwi build flag |
+|-----|---------|-----------|------------------|
+| `climate-sensor` | temperature (°C), humidity (%) | — | `-DTYPE_CLIMATE_SENSOR` |
+| `light-controller` | light (lux) | lighting | `-DTYPE_LIGHT_CONTROLLER` |
+| `full-greenhouse` | temperature, humidity, light | lighting | `-DTYPE_FULL_GREENHOUSE` |
+
+### Device.provision_by_type(device_type, db)
+
+Метод ORM-модели `Device`. По ключу из словаря создаёт нужные `Sensor` и `Actuator` записи.
+Вызывается в эндпоинте `POST /api/v1/greenhouses/{id}/devices` автоматически.
+
+### GET /api/v1/device-types
+
+Публичный эндпоинт — отдаёт фронту список доступных типов с описанием, сенсорами и актуаторами.
+
+### Wokwi: один исходник, условная компиляция
+
+`wokwi/src/main.cpp` — единый файл для всех типов. Флаги `HAS_DHT`, `HAS_LDR`, `HAS_LED` включают/выключают блоки кода через `#if`. Тип задаётся в `platformio.ini` через `build_flags`.
+
+Каждый тип устройства имеет свою папку в `wokwi/device-types/` с `diagram.json` (схема Wokwi) и `wokwi.toml` (путь к прошивке).
+
+### Справочные таблицы (seed data)
+
+Заполняются при старте бэкенда (`_seed_reference_data()` в main.py):
+- `sensor_types`: temperature (1), humidity (2), light (3)
+- `actuator_types`: lighting (1), heating (2), ventilation (3), watering (4)
+
 ## Масштабирование (на будущее)
 
 - **Горизонтальное**: stateless-бэкенд, read-реплики БД
