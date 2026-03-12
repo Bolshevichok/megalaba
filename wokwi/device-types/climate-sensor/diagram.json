@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "author": "Smart Greenhouse",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht",
+      "top": -80,
+      "left": 150,
+      "attrs": { "temperature": "24", "humidity": "60" }
+    }
+  ],
+  "connections": [
+    ["esp:TX", "$serialMonitor:RX", "", []],
+    ["esp:RX", "$serialMonitor:TX", "", []],
+    ["dht:VCC", "esp:3V3", "red", ["v:20", "h:-40"]],
+    ["dht:SDA", "esp:15", "green", ["v:30", "h:-60"]],
+    ["dht:GND", "esp:GND.2", "black", ["v:40", "h:-80"]]
+  ]
+}
