@@ -16,7 +16,7 @@ export const COLORS = {
   "teal hover":        "#1FC8C8",
 
   // device type colors
-  "device orange":     "#C47200",
+  "device orange":     "#5a482f",
   "device olive":      "#8A8A00",
   "device teal":       "#1A8080",
   "device red":        "#9A2020",
