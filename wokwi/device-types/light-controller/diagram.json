@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "author": "Smart Greenhouse",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-photoresistor-sensor",
+      "id": "ldr",
+      "top": -80,
+      "left": 150,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": -80,
+      "left": -100,
+      "attrs": { "color": "yellow", "label": "Lighting" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": -30,
+      "left": -100,
+      "attrs": { "resistance": "220" }
+    }
+  ],
+  "connections": [
+    ["esp:TX", "$serialMonitor:RX", "", []],
+    ["esp:RX", "$serialMonitor:TX", "", []],
+    ["ldr:VCC", "esp:3V3", "red", ["v:20", "h:-40"]],
+    ["ldr:DO", "esp:34", "orange", ["v:30", "h:-60"]],
+    ["ldr:GND", "esp:GND.1", "black", ["v:40", "h:-80"]],
+    ["led1:A", "r1:1", "green", []],
+    ["r1:2", "esp:2", "green", ["h:40"]],
+    ["led1:C", "esp:GND.3", "black", ["v:20"]]
+  ]
+}
