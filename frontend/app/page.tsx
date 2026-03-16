@@ -19,6 +19,7 @@ type PlacedDevice = {
   label: string;
   color: string;
   type: DeviceType;
+  order: number;
   x: number;
   y: number;
 };
@@ -29,6 +30,41 @@ type Project = {
   expanded: boolean;
   devices: DeviceTemplate[];
   placed: PlacedDevice[];
+};
+
+type RuleJoin = "AND" | "OR";
+type RuleOperator = ">" | ">=" | "=" | "<=" | "<";
+type RuleCommand = "on" | "off";
+type RuleScopeMode = "all" | "custom";
+
+type RuleCondition = {
+  id: string;
+  sensorKeys: string[];
+  operator: RuleOperator;
+  value: string;
+  joinWithPrevious: RuleJoin;
+};
+
+type RuleDeviceOption = {
+  id: string;
+  label: string;
+};
+
+type RuleDeviceTypeOption = {
+  label: string;
+  ids: string[];
+};
+
+type AutomationRule = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  scopeMode: RuleScopeMode;
+  allowedSensorKeys: string[];
+  allowedActuatorKeys: string[];
+  conditions: RuleCondition[];
+  actuatorKeys: string[];
+  command: RuleCommand;
 };
 
 const DEVICE_TYPE_TITLES: Record<DeviceType, string> = {
@@ -63,6 +99,9 @@ export default function Home() {
   const [pending, setPending] = useState<DeviceTemplate | null>(null);
   const [activePlacedId, setActivePlacedId] = useState<string | null>(null);
   const [canvasFilter, setCanvasFilter] = useState<DeviceType | "all">("all");
+  const [isAutomationOpen, setIsAutomationOpen] = useState(false);
+  const [rulesByProject, setRulesByProject] = useState<Record<string, AutomationRule[]>>({});
+  const [activeRuleIdByProject, setActiveRuleIdByProject] = useState<Record<string, string | null>>({});
 
   const canvasRef = useRef<HTMLElement | null>(null);
   const draggingRef = useRef<{ projectId: string; deviceId: string } | null>(null);
@@ -74,6 +113,159 @@ export default function Home() {
     () => projects.find((project) => project.id === selectedId) ?? null,
     [projects, selectedId],
   );
+
+  const selectedSensors = useMemo<RuleDeviceOption[]>(() => {
+    if (!selected) {
+      return [];
+    }
+
+    const counters: Record<string, number> = {};
+    return selected.placed
+      .filter((device) => device.type === "sensors")
+      .map((device) => {
+        counters[device.label] = (counters[device.label] ?? 0) + 1;
+        return {
+          id: device.id,
+          label: `${device.label} ${counters[device.label]}`,
+        };
+      });
+  }, [selected]);
+
+  const selectedActuators = useMemo<RuleDeviceOption[]>(() => {
+    if (!selected) {
+      return [];
+    }
+
+    const counters: Record<string, number> = {};
+    return selected.placed
+      .filter((device) => device.type === "actuators")
+      .map((device) => {
+        counters[device.label] = (counters[device.label] ?? 0) + 1;
+        return {
+          id: device.id,
+          label: `${device.label} ${counters[device.label]}`,
+        };
+      });
+  }, [selected]);
+
+  const selectedSensorTypes = useMemo<RuleDeviceTypeOption[]>(() => {
+    const grouped = new Map<string, string[]>();
+    selectedSensors.forEach((sensor) => {
+      const baseLabel = sensor.label.replace(/\s\d+$/, "");
+      grouped.set(baseLabel, [...(grouped.get(baseLabel) ?? []), sensor.id]);
+    });
+
+    return Array.from(grouped.entries()).map(([label, ids]) => ({ label, ids }));
+  }, [selectedSensors]);
+
+  const selectedActuatorTypes = useMemo<RuleDeviceTypeOption[]>(() => {
+    const grouped = new Map<string, string[]>();
+    selectedActuators.forEach((actuator) => {
+      const baseLabel = actuator.label.replace(/\s\d+$/, "");
+      grouped.set(baseLabel, [...(grouped.get(baseLabel) ?? []), actuator.id]);
+    });
+
+    return Array.from(grouped.entries()).map(([label, ids]) => ({ label, ids }));
+  }, [selectedActuators]);
+
+  const selectedRules = useMemo(
+    () => (selected ? rulesByProject[selected.id] ?? [] : []),
+    [rulesByProject, selected],
+  );
+
+  const activeRule = useMemo(() => {
+    if (!selected) {
+      return null;
+    }
+    const ruleId = activeRuleIdByProject[selected.id];
+    if (!ruleId) {
+      return null;
+    }
+    return selectedRules.find((rule) => rule.id === ruleId) ?? null;
+  }, [activeRuleIdByProject, selected, selectedRules]);
+
+  const availableSensorsForRule = useMemo(() => {
+    if (!activeRule) {
+      return [];
+    }
+    if (activeRule.scopeMode === "all") {
+      return selectedSensors;
+    }
+    return selectedSensors.filter((device) => activeRule.allowedSensorKeys.includes(device.id));
+  }, [activeRule, selectedSensors]);
+
+  const availableActuatorsForRule = useMemo(() => {
+    if (!activeRule) {
+      return [];
+    }
+    if (activeRule.scopeMode === "all") {
+      return selectedActuators;
+    }
+    return selectedActuators.filter((device) => activeRule.allowedActuatorKeys.includes(device.id));
+  }, [activeRule, selectedActuators]);
+
+  const createDefaultCondition = (): RuleCondition => ({
+    id: `condition-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    sensorKeys: selectedSensors[0]?.id ? [selectedSensors[0].id] : [],
+    operator: ">",
+    value: "",
+    joinWithPrevious: "OR",
+  });
+
+  const createRule = () => {
+    if (!selected) {
+      return;
+    }
+
+    const newRule: AutomationRule = {
+      id: `rule-${Date.now()}`,
+      name: `Правило ${selectedRules.length + 1}`,
+      enabled: true,
+      scopeMode: "all",
+      allowedSensorKeys: selectedSensors.map((device) => device.id),
+      allowedActuatorKeys: selectedActuators.map((device) => device.id),
+      conditions: [createDefaultCondition()],
+      actuatorKeys: selectedActuators[0]?.id ? [selectedActuators[0].id] : [],
+      command: "on",
+    };
+
+    setRulesByProject((prev) => ({
+      ...prev,
+      [selected.id]: [...(prev[selected.id] ?? []), newRule],
+    }));
+
+    setActiveRuleIdByProject((prev) => ({
+      ...prev,
+      [selected.id]: newRule.id,
+    }));
+  };
+
+  const updateRule = (ruleId: string, updater: (rule: AutomationRule) => AutomationRule) => {
+    if (!selected) {
+      return;
+    }
+    setRulesByProject((prev) => ({
+      ...prev,
+      [selected.id]: (prev[selected.id] ?? []).map((rule) => (rule.id === ruleId ? updater(rule) : rule)),
+    }));
+  };
+
+  const deleteRule = (ruleId: string) => {
+    if (!selected) {
+      return;
+    }
+
+    const nextRules = (rulesByProject[selected.id] ?? []).filter((rule) => rule.id !== ruleId);
+    setRulesByProject((prev) => ({
+      ...prev,
+      [selected.id]: nextRules,
+    }));
+
+    setActiveRuleIdByProject((prev) => ({
+      ...prev,
+      [selected.id]: nextRules[0]?.id ?? null,
+    }));
+  };
 
   const createProject = () => {
     const typedName = window.prompt("project name", `teplitsa ${projects.length + 1}`);
@@ -122,6 +314,7 @@ export default function Home() {
       label: pending.label,
       color: pending.color,
       type: pending.type,
+      order: selected.placed.length + 1,
       x,
       y,
     };
@@ -371,6 +564,18 @@ export default function Home() {
                       >
                         {project.name}
                       </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedId(project.id);
+                          setIsAutomationOpen(true);
+                        }}
+                        style={scriptsBtnStyle}
+                        title="Скрипты"
+                      >
+                        scripts
+                      </button>
                     </div>
 
                     {project.expanded && (
@@ -581,7 +786,7 @@ export default function Home() {
               ))}
             </div>
 
-            {visiblePlacedDevices.map((device, idx) => (
+            {visiblePlacedDevices.map((device) => (
               <div
                 key={device.id}
                 onPointerDown={(event) => {
@@ -628,7 +833,7 @@ export default function Home() {
                     flexShrink: 0,
                   }}
                 >
-                  {idx + 1}
+                  {device.order}
                 </div>
                 <div
                   style={{
@@ -686,6 +891,431 @@ export default function Home() {
           </section>
         </div>
       </div>
+
+      {isAutomationOpen && (
+        <div style={modalOverlayStyle} onClick={() => setIsAutomationOpen(false)}>
+          <div style={modalStyle} onClick={(event) => event.stopPropagation()}>
+            <div style={modalHeaderStyle}>
+              <span>Автоматизация</span>
+              <button type="button" style={modalCloseBtnStyle} onClick={() => setIsAutomationOpen(false)}>
+                close
+              </button>
+            </div>
+
+            {!selected ? (
+              <div style={emptyModalStateStyle}>Сначала создайте и выберите теплицу</div>
+            ) : (
+              <div style={modalContentStyle}>
+                <aside style={rulesListStyle}>
+                  <button type="button" style={newRuleBtnStyle} onClick={createRule}>
+                    + новое правило
+                  </button>
+
+                  {selectedRules.map((rule) => (
+                    <button
+                      key={rule.id}
+                      type="button"
+                      onClick={() =>
+                        setActiveRuleIdByProject((prev) => ({
+                          ...prev,
+                          [selected.id]: rule.id,
+                        }))
+                      }
+                      style={{
+                        ...ruleItemStyle,
+                        borderColor: activeRule?.id === rule.id ? COLORS["light green text"] : "transparent",
+                      }}
+                    >
+                      <span>{rule.name}</span>
+                      <span style={{ opacity: 0.75 }}>{rule.enabled ? "on" : "off"}</span>
+                    </button>
+                  ))}
+                </aside>
+
+                <section style={editorStyle}>
+                  {!activeRule ? (
+                    <div style={emptyModalStateStyle}>Создайте или выберите правило</div>
+                  ) : (
+                    <>
+                      <div style={editorRowStyle}>
+                        <input
+                          value={activeRule.name}
+                          onChange={(event) =>
+                            updateRule(activeRule.id, (rule) => ({ ...rule, name: event.target.value }))
+                          }
+                          style={textInputStyle}
+                        />
+                        <label style={toggleLabelStyle}>
+                          <input
+                            type="checkbox"
+                            checked={activeRule.enabled}
+                            onChange={(event) =>
+                              updateRule(activeRule.id, (rule) => ({ ...rule, enabled: event.target.checked }))
+                            }
+                          />
+                          enabled
+                        </label>
+                        <button type="button" style={dangerBtnStyle} onClick={() => deleteRule(activeRule.id)}>
+                          удалить
+                        </button>
+                      </div>
+
+                      <div style={sectionTitleStyle}>Если</div>
+
+                      <div style={scopePanelStyle}>
+                        <div style={scopeHeaderStyle}>Устройства в правиле</div>
+                        <div style={conditionRowStyle}>
+                          <select
+                            value={activeRule.scopeMode}
+                            onChange={(event) => {
+                              const nextMode = event.target.value as RuleScopeMode;
+                              updateRule(activeRule.id, (rule) => {
+                                const baseRule: AutomationRule =
+                                  nextMode === "all"
+                                    ? {
+                                        ...rule,
+                                        scopeMode: "all",
+                                        allowedSensorKeys: selectedSensors.map((device) => device.id),
+                                        allowedActuatorKeys: selectedActuators.map((device) => device.id),
+                                      }
+                                    : {
+                                        ...rule,
+                                        scopeMode: "custom",
+                                        allowedSensorKeys:
+                                          rule.allowedSensorKeys.length > 0
+                                            ? rule.allowedSensorKeys
+                                            : selectedSensors.map((device) => device.id),
+                                        allowedActuatorKeys:
+                                          rule.allowedActuatorKeys.length > 0
+                                            ? rule.allowedActuatorKeys
+                                            : selectedActuators.map((device) => device.id),
+                                      };
+
+                                const sensorPool =
+                                  baseRule.scopeMode === "all"
+                                    ? selectedSensors
+                                    : selectedSensors.filter((device) =>
+                                        baseRule.allowedSensorKeys.includes(device.id),
+                                      );
+                                const actuatorPool =
+                                  baseRule.scopeMode === "all"
+                                    ? selectedActuators
+                                    : selectedActuators.filter((device) =>
+                                        baseRule.allowedActuatorKeys.includes(device.id),
+                                      );
+
+                                return {
+                                  ...baseRule,
+                                  conditions: baseRule.conditions.map((condition) => ({
+                                      ...condition,
+                                      sensorKeys: condition.sensorKeys.filter((sensorId) =>
+                                        sensorPool.some((sensor) => sensor.id === sensorId),
+                                      ),
+                                    })),
+                                  actuatorKeys: baseRule.actuatorKeys.filter((actuatorId) =>
+                                    actuatorPool.some((actuator) => actuator.id === actuatorId),
+                                  ),
+                                };
+                              });
+                            }}
+                            style={smallSelectStyle}
+                          >
+                            <option value="all">все устройства</option>
+                            <option value="custom">конкретные</option>
+                          </select>
+                        </div>
+
+                        {activeRule.scopeMode === "custom" && (
+                          <>
+                            <div style={scopeGroupTitleStyle}>Датчики для условий</div>
+                            <div style={scopeCheckboxGridStyle}>
+                              {selectedSensorTypes.map((sensorType) => (
+                                <label key={sensorType.label} style={scopeCheckboxLabelStyle}>
+                                  <input
+                                    type="checkbox"
+                                    checked={sensorType.ids.every((id) => activeRule.allowedSensorKeys.includes(id))}
+                                    onChange={(event) => {
+                                      updateRule(activeRule.id, (rule) => {
+                                        const nextKeys = event.target.checked
+                                          ? [...rule.allowedSensorKeys, ...sensorType.ids]
+                                          : rule.allowedSensorKeys.filter(
+                                              (key) => !sensorType.ids.includes(key),
+                                            );
+                                        const uniqueKeys = Array.from(new Set(nextKeys));
+                                        const filteredSensors = selectedSensors.filter((device) =>
+                                          uniqueKeys.includes(device.id),
+                                        );
+
+                                        return {
+                                          ...rule,
+                                          allowedSensorKeys: uniqueKeys,
+                                          conditions: rule.conditions.map((condition) => ({
+                                              ...condition,
+                                              sensorKeys: condition.sensorKeys.filter((sensorId) =>
+                                                filteredSensors.some((device) => device.id === sensorId),
+                                              ),
+                                            })),
+                                        };
+                                      });
+                                    }}
+                                  />
+                                  {sensorType.label}
+                                </label>
+                              ))}
+                            </div>
+
+                            <div style={scopeGroupTitleStyle}>Актуаторы для действий</div>
+                            <div style={scopeCheckboxGridStyle}>
+                              {selectedActuatorTypes.map((actuatorType) => (
+                                <label key={actuatorType.label} style={scopeCheckboxLabelStyle}>
+                                  <input
+                                    type="checkbox"
+                                    checked={actuatorType.ids.every((id) => activeRule.allowedActuatorKeys.includes(id))}
+                                    onChange={(event) => {
+                                      updateRule(activeRule.id, (rule) => {
+                                        const nextKeys = event.target.checked
+                                          ? [...rule.allowedActuatorKeys, ...actuatorType.ids]
+                                          : rule.allowedActuatorKeys.filter(
+                                              (key) => !actuatorType.ids.includes(key),
+                                            );
+                                        const uniqueKeys = Array.from(new Set(nextKeys));
+                                        const filteredActuators = selectedActuators.filter((device) =>
+                                          uniqueKeys.includes(device.id),
+                                        );
+
+                                        return {
+                                          ...rule,
+                                          allowedActuatorKeys: uniqueKeys,
+                                          actuatorKeys: rule.actuatorKeys.filter((actuatorId) =>
+                                            filteredActuators.some((device) => device.id === actuatorId),
+                                          ),
+                                        };
+                                      });
+                                    }}
+                                  />
+                                  {actuatorType.label}
+                                </label>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {activeRule.conditions.map((condition, index) => (
+                        <div key={condition.id} style={conditionRowStyle}>
+                          {index > 0 && (
+                            <select
+                              value={condition.joinWithPrevious}
+                              onChange={(event) =>
+                                updateRule(activeRule.id, (rule) => ({
+                                  ...rule,
+                                  conditions: rule.conditions.map((item) =>
+                                    item.id === condition.id
+                                      ? { ...item, joinWithPrevious: event.target.value as RuleJoin }
+                                      : item,
+                                  ),
+                                }))
+                              }
+                              style={smallSelectStyle}
+                            >
+                              <option value="AND">И</option>
+                              <option value="OR">ИЛИ</option>
+                            </select>
+                          )}
+
+                          <MultiSelectDropdown
+                            options={availableSensorsForRule}
+                            selectedIds={condition.sensorKeys}
+                            placeholder="выберите датчики"
+                            onChange={(selectedIds) =>
+                              updateRule(activeRule.id, (rule) => ({
+                                ...rule,
+                                conditions: rule.conditions.map((item) =>
+                                  item.id === condition.id ? { ...item, sensorKeys: selectedIds } : item,
+                                ),
+                              }))
+                            }
+                          />
+
+                          <select
+                            value={condition.operator}
+                            onChange={(event) =>
+                              updateRule(activeRule.id, (rule) => ({
+                                ...rule,
+                                conditions: rule.conditions.map((item) =>
+                                  item.id === condition.id
+                                    ? { ...item, operator: event.target.value as RuleOperator }
+                                    : item,
+                                ),
+                              }))
+                            }
+                            style={smallSelectStyle}
+                          >
+                            <option value=">">{">"}</option>
+                            <option value=">=">{">="}</option>
+                            <option value="=">{"="}</option>
+                            <option value="<=">{"<="}</option>
+                            <option value="<">{"<"}</option>
+                          </select>
+
+                          <input
+                            value={condition.value}
+                            onChange={(event) =>
+                              updateRule(activeRule.id, (rule) => ({
+                                ...rule,
+                                conditions: rule.conditions.map((item) =>
+                                  item.id === condition.id ? { ...item, value: event.target.value } : item,
+                                ),
+                              }))
+                            }
+                            placeholder="значение"
+                            style={valueInputStyle}
+                          />
+
+                          <button
+                            type="button"
+                            style={miniBtnStyle}
+                            disabled={activeRule.conditions.length <= 1}
+                            onClick={() =>
+                              updateRule(activeRule.id, (rule) => ({
+                                ...rule,
+                                conditions: rule.conditions.filter((item) => item.id !== condition.id),
+                              }))
+                            }
+                          >
+                            -
+                          </button>
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        style={miniBtnStyle}
+                        onClick={() =>
+                          updateRule(activeRule.id, (rule) => ({
+                            ...rule,
+                            conditions: [...rule.conditions, createDefaultCondition()],
+                          }))
+                        }
+                      >
+                        + добавить условие
+                      </button>
+
+                      <div style={sectionTitleStyle}>Тогда</div>
+
+                      <div style={conditionRowStyle}>
+                        <MultiSelectDropdown
+                          options={availableActuatorsForRule}
+                          selectedIds={activeRule.actuatorKeys}
+                          placeholder="выберите актуаторы"
+                          onChange={(selectedIds) =>
+                            updateRule(activeRule.id, (rule) => ({ ...rule, actuatorKeys: selectedIds }))
+                          }
+                        />
+
+                        <select
+                          value={activeRule.command}
+                          onChange={(event) =>
+                            updateRule(activeRule.id, (rule) => ({
+                              ...rule,
+                              command: event.target.value as RuleCommand,
+                            }))
+                          }
+                          style={smallSelectStyle}
+                        >
+                          <option value="on">включить</option>
+                          <option value="off">выключить</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </section>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MultiSelectDropdown({
+  options,
+  selectedIds,
+  onChange,
+  placeholder,
+}: {
+  options: RuleDeviceOption[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  placeholder: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const selectedLabels = options
+    .filter((option) => selectedIds.includes(option.id))
+    .map((option) => option.label);
+
+  const previewText =
+    selectedLabels.length === 0
+      ? placeholder
+      : selectedLabels.length <= 2
+        ? selectedLabels.join(", ")
+        : `${selectedLabels.slice(0, 2).join(", ")} +${selectedLabels.length - 2}`;
+
+  const toggleOption = (optionId: string) => {
+    if (selectedIds.includes(optionId)) {
+      onChange(selectedIds.filter((id) => id !== optionId));
+      return;
+    }
+    onChange([...selectedIds, optionId]);
+  };
+
+  return (
+    <div
+      style={multiSelectWrapperStyle}
+      tabIndex={0}
+      onBlur={(event) => {
+        const nextFocused = event.relatedTarget as Node | null;
+        if (!nextFocused || !event.currentTarget.contains(nextFocused)) {
+          setIsOpen(false);
+        }
+      }}
+    >
+      <button
+        type="button"
+        style={multiSelectControlButtonStyle}
+        onClick={() => setIsOpen((prev) => !prev)}
+      >
+        <span style={multiSelectPreviewStyle}>{previewText}</span>
+        <span style={multiSelectChevronStyle}>{isOpen ? "^" : "v"}</span>
+      </button>
+
+      {isOpen && (
+        <div style={multiSelectMenuStyle}>
+          {options.length === 0 ? (
+            <div style={multiSelectEmptyStyle}>нет устройств</div>
+          ) : (
+            options.map((option) => {
+              const checked = selectedIds.includes(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  style={{
+                    ...multiSelectOptionStyle,
+                    background: checked ? "rgba(116, 143, 114, 0.26)" : "transparent",
+                  }}
+                  onClick={() => toggleOption(option.id)}
+                >
+                  <input type="checkbox" checked={checked} readOnly />
+                  <span>{option.label}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -768,6 +1398,20 @@ const tealBtn: CSSProperties = {
   cursor: "pointer",
 };
 
+const scriptsBtnStyle: CSSProperties = {
+  border: "none",
+  borderRadius: 8,
+  height: 22,
+  padding: "0 8px",
+  background: COLORS.teal,
+  color: COLORS["light green text"],
+  fontFamily: FONT,
+  fontSize: 12,
+  lineHeight: 1,
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
 const projectRowStyle: CSSProperties = {
   width: "100%",
   border: "none",
@@ -847,4 +1491,289 @@ const filterButtonStyle: CSSProperties = {
   fontSize: 14,
   lineHeight: 1,
   cursor: "pointer",
+};
+
+const modalOverlayStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0, 0, 0, 0.55)",
+  display: "grid",
+  placeItems: "center",
+  zIndex: 80,
+};
+
+const modalStyle: CSSProperties = {
+  width: "min(1080px, 95vw)",
+  height: "min(700px, 90vh)",
+  background: COLORS["panel"],
+  border: `1px solid ${COLORS["green text"]}`,
+  borderRadius: 16,
+  boxShadow: "0 18px 50px rgba(0, 0, 0, 0.45)",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+};
+
+const modalHeaderStyle: CSSProperties = {
+  height: 46,
+  borderBottom: `1px solid ${COLORS["green text"]}`,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "0 14px",
+  color: COLORS["light green text"],
+  fontSize: 20,
+};
+
+const modalCloseBtnStyle: CSSProperties = {
+  border: "none",
+  borderRadius: 8,
+  height: 28,
+  padding: "0 10px",
+  background: COLORS.teal,
+  color: COLORS["light green text"],
+  fontFamily: FONT,
+  fontSize: 14,
+  cursor: "pointer",
+};
+
+const modalContentStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "260px 1fr",
+  gap: 12,
+  minHeight: 0,
+  flex: 1,
+  padding: 12,
+};
+
+const rulesListStyle: CSSProperties = {
+  border: `1px solid ${COLORS["green text"]}`,
+  borderRadius: 10,
+  padding: 8,
+  overflow: "auto",
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+};
+
+const newRuleBtnStyle: CSSProperties = {
+  border: "none",
+  borderRadius: 8,
+  height: 30,
+  background: COLORS.teal,
+  color: COLORS["light green text"],
+  fontFamily: FONT,
+  fontSize: 14,
+  cursor: "pointer",
+};
+
+const ruleItemStyle: CSSProperties = {
+  border: "1px solid transparent",
+  borderRadius: 8,
+  background: "rgba(116, 143, 114, 0.18)",
+  color: COLORS["light green text"],
+  padding: "6px 8px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  cursor: "pointer",
+  textAlign: "left",
+  fontFamily: FONT,
+  fontSize: 14,
+};
+
+const editorStyle: CSSProperties = {
+  border: `1px solid ${COLORS["green text"]}`,
+  borderRadius: 10,
+  padding: 12,
+  overflow: "auto",
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+};
+
+const editorRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
+const textInputStyle: CSSProperties = {
+  height: 30,
+  borderRadius: 8,
+  border: `1px solid ${COLORS["green text"]}`,
+  background: COLORS["solid back"],
+  color: COLORS["light green text"],
+  padding: "0 8px",
+  minWidth: 240,
+  fontFamily: FONT,
+  fontSize: 14,
+};
+
+const toggleLabelStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  color: COLORS["light green text"],
+  fontSize: 14,
+};
+
+const dangerBtnStyle: CSSProperties = {
+  border: "none",
+  borderRadius: 8,
+  height: 30,
+  padding: "0 10px",
+  background: COLORS["device red"],
+  color: COLORS["light green text"],
+  fontFamily: FONT,
+  fontSize: 14,
+  cursor: "pointer",
+};
+
+const sectionTitleStyle: CSSProperties = {
+  color: COLORS["light green text"],
+  fontSize: 18,
+};
+
+const conditionRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const selectStyle: CSSProperties = {
+  height: 30,
+  borderRadius: 8,
+  border: `1px solid ${COLORS["green text"]}`,
+  background: COLORS["solid back"],
+  color: COLORS["light green text"],
+  padding: "0 8px",
+  minWidth: 220,
+  fontFamily: FONT,
+  fontSize: 14,
+};
+
+const multiSelectWrapperStyle: CSSProperties = {
+  position: "relative",
+  minWidth: 220,
+};
+
+const multiSelectControlButtonStyle: CSSProperties = {
+  ...selectStyle,
+  width: "100%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  cursor: "pointer",
+};
+
+const multiSelectPreviewStyle: CSSProperties = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  textAlign: "left",
+};
+
+const multiSelectChevronStyle: CSSProperties = {
+  marginLeft: 8,
+  lineHeight: 1,
+  flexShrink: 0,
+};
+
+const multiSelectMenuStyle: CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 4px)",
+  left: 0,
+  right: 0,
+  borderRadius: 8,
+  border: `1px solid ${COLORS["green text"]}`,
+  background: COLORS["solid back"],
+  maxHeight: 210,
+  overflowY: "auto",
+  zIndex: 15,
+  boxShadow: "0 12px 26px rgba(0, 0, 0, 0.35)",
+};
+
+const multiSelectOptionStyle: CSSProperties = {
+  border: "none",
+  width: "100%",
+  minHeight: 30,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: COLORS["light green text"],
+  padding: "4px 8px",
+  textAlign: "left",
+  fontFamily: FONT,
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const multiSelectEmptyStyle: CSSProperties = {
+  color: COLORS["green text"],
+  padding: "8px",
+  fontSize: 13,
+};
+
+const smallSelectStyle: CSSProperties = {
+  ...selectStyle,
+  minWidth: 92,
+};
+
+const valueInputStyle: CSSProperties = {
+  ...textInputStyle,
+  minWidth: 120,
+};
+
+const miniBtnStyle: CSSProperties = {
+  border: "none",
+  borderRadius: 8,
+  height: 28,
+  padding: "0 8px",
+  background: COLORS.teal,
+  color: COLORS["light green text"],
+  fontFamily: FONT,
+  fontSize: 14,
+  cursor: "pointer",
+};
+
+const emptyModalStateStyle: CSSProperties = {
+  display: "grid",
+  placeItems: "center",
+  flex: 1,
+  color: COLORS["green text"],
+  fontSize: 18,
+};
+
+const scopePanelStyle: CSSProperties = {
+  border: `1px solid ${COLORS["green text"]}`,
+  borderRadius: 10,
+  padding: 8,
+  display: "grid",
+  gap: 8,
+};
+
+const scopeHeaderStyle: CSSProperties = {
+  color: COLORS["light green text"],
+  fontSize: 14,
+};
+
+const scopeGroupTitleStyle: CSSProperties = {
+  color: COLORS["green text"],
+  fontSize: 13,
+};
+
+const scopeCheckboxGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+  gap: 6,
+};
+
+const scopeCheckboxLabelStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  color: COLORS["light green text"],
+  fontSize: 13,
 };
