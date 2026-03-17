@@ -193,6 +193,10 @@ class DeviceResponse(BaseModel):
         ip_address: IP address.
         status: Online/offline status.
         last_seen: Last MQTT activity timestamp.
+        sensor_count: Number of sensors attached to the device.
+        actuator_count: Number of actuators attached to the device.
+        sensors: List of attached sensors.
+        actuators: List of attached actuators.
     """
 
     id: int
@@ -204,6 +208,8 @@ class DeviceResponse(BaseModel):
     last_seen: datetime | None = None
     sensor_count: int = 0
     actuator_count: int = 0
+    sensors: list["SensorResponse"] = []
+    actuators: list["ActuatorResponse"] = []
 
     model_config = {"from_attributes": True}
 
@@ -257,6 +263,7 @@ class SensorResponse(BaseModel):
         sensor_type_id: Sensor type FK.
         name: Sensor name.
         unit: Measurement unit.
+        type_name: String name of the sensor type.
     """
 
     id: int
@@ -264,6 +271,7 @@ class SensorResponse(BaseModel):
     sensor_type_id: int
     name: str | None = None
     unit: str | None = None
+    type_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -343,12 +351,14 @@ class ActuatorResponse(BaseModel):
         device_id: Parent device ID.
         actuator_type_id: Actuator type FK.
         status: Current on/off status.
+        type_name: String name of the actuator type.
     """
 
     id: int
     device_id: int
     actuator_type_id: int
     status: str | None = None
+    type_name: str | None = None
 
     model_config = {"from_attributes": True}
 

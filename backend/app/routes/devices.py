@@ -23,6 +23,27 @@ def _serialize_device(device: Device) -> dict:
         "last_seen": device.last_seen,
         "sensor_count": len(device.sensors or []),
         "actuator_count": len(device.actuators or []),
+        "sensors": [
+            {
+                "id": s.id,
+                "device_id": s.device_id,
+                "sensor_type_id": s.sensor_type_id,
+                "name": s.name,
+                "unit": s.unit,
+                "type_name": s.sensor_type.name if s.sensor_type else None
+            }
+            for s in (device.sensors or [])
+        ],
+        "actuators": [
+            {
+                "id": a.id,
+                "device_id": a.device_id,
+                "actuator_type_id": a.actuator_type_id,
+                "status": a.status.value if a.status else None,
+                "type_name": a.actuator_type.name if a.actuator_type else None
+            }
+            for a in (device.actuators or [])
+        ]
     }
 
 
@@ -67,7 +88,10 @@ def list_unassigned_devices(
     # We might want to restrict this to admins, but for now any authenticated user can pull them
     devices = (
         db.query(Device)
-        .options(joinedload(Device.sensors), joinedload(Device.actuators))
+        .options(
+            joinedload(Device.sensors).joinedload(Sensor.sensor_type),
+            joinedload(Device.actuators).joinedload(Actuator.actuator_type),
+        )
         .filter(Device.greenhouse_id == None)
         .all()
     )
@@ -127,7 +151,10 @@ def list_devices(
 
     query = (
         db.query(Device)
-        .options(joinedload(Device.sensors), joinedload(Device.actuators))
+        .options(
+            joinedload(Device.sensors).joinedload(Sensor.sensor_type),
+            joinedload(Device.actuators).joinedload(Actuator.actuator_type),
+        )
         .filter(Device.greenhouse_id == greenhouse.id)
     )
     if status_filter is not None:

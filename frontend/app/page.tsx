@@ -22,6 +22,8 @@ type DeviceTemplate = {
   color: string;
   type: DeviceType;
   sourceId?: number;
+  capabilities?: string[];
+  subTypeLabel?: string;
 };
 
 type PlacedDevice = {
@@ -34,12 +36,25 @@ type PlacedDevice = {
   y: number;
   currentReading?: string | number;
   sourceId?: number;
+  capabilities?: string[];
+  subTypeLabel?: string;
+};
+
+const CAPABILITY_DICT: Record<string, string> = {
+  "light": "свет",
+  "temperature": "температура",
+  "humidity": "влажность",
+  "lighting": "освещение",
+  "heating": "отопление",
+  "ventilation": "вентиляция",
+  "watering": "полив"
 };
 
 const SENSOR_UNITS: Record<string, string> = {
   "освещенность": "lx",
   "влажность": "%",
   "температура": "°C",
+  "свет": "lx",
 };
 
 type Project = {
@@ -66,6 +81,8 @@ type RuleCondition = {
 type RuleDeviceOption = {
   id: string;
   label: string;
+  subTypeLabel?: string;
+  capabilities?: string[];
 };
 
 type RuleDeviceTypeOption = {
@@ -164,19 +181,32 @@ export default function Home() {
           let type: DeviceType = "sensors";
           let color: string = COLORS["device teal"];
 
-         const actuatorCount = Number(d?.actuator_count ?? 0);
+          const actuatorCount = Number(d?.actuator_count ?? 0);
+          let caps: string[] = [];
 
           if (actuatorCount > 0 || d?.device_type?.includes("actuator")) {
             type = "actuators";
             color = COLORS["device orange"];
+            if (Array.isArray(d.actuators)) {
+              caps = Array.from(new Set(d.actuators.map((a: any) => a.type_name).filter(Boolean)));
+            }
+          } else {
+            if (Array.isArray(d.sensors)) {
+              caps = Array.from(new Set(d.sensors.map((s: any) => s.type_name).filter(Boolean)));
+            }
           }
+
+          const subTypeLabel = caps.map((c) => CAPABILITY_DICT[c] || c).join(', ');
+          const finalLabel = d.name;
 
           return {
             key: String(d.id),
-            label: d.name,
+            label: finalLabel,
             color,
             type,
             sourceId: d.id,
+            capabilities: caps,
+            subTypeLabel: subTypeLabel || (type === "actuators" ? "Актуатор" : "Датчик"),
           };
         }),
       );
@@ -208,57 +238,81 @@ export default function Home() {
   );
 
   const selectedSensors = useMemo<RuleDeviceOption[]>(() => {
-    if (!selected) {
-      return [];
-    }
+    if (!selected) return [];
 
+    const options: RuleDeviceOption[] = [];
     const counters: Record<string, number> = {};
-    return selected.placed
+
+    selected.placed
       .filter((device) => device.type === "sensors")
-      .map((device) => {
+      .forEach((device) => {
         counters[device.label] = (counters[device.label] ?? 0) + 1;
-        return {
-          id: String(device.sourceId ?? device.id),
-          label: `${device.label} ${counters[device.label]}`,
-        };
+        const order = counters[device.label];
+        const baseId = String(device.sourceId ?? device.id);
+
+        const cap = device.capabilities && device.capabilities.length > 0 ? device.capabilities[0] : null;
+        const capRu = cap ? (CAPABILITY_DICT[cap] || cap) : "";
+        const label = capRu 
+            ? `${device.label} ${order} (${capRu})` 
+            : `${device.label} ${order}`;
+
+        options.push({
+            id: baseId,
+            label,
+            subTypeLabel: capRu || device.subTypeLabel || device.label,
+            capabilities: device.capabilities || [],
+        });
       });
+    return options;
   }, [selected]);
 
   const selectedActuators = useMemo<RuleDeviceOption[]>(() => {
-    if (!selected) {
-      return [];
-    }
+    if (!selected) return [];
 
+    const options: RuleDeviceOption[] = [];
     const counters: Record<string, number> = {};
-    return selected.placed
+
+    selected.placed
       .filter((device) => device.type === "actuators")
-      .map((device) => {
+      .forEach((device) => {
         counters[device.label] = (counters[device.label] ?? 0) + 1;
-        return {
-          id: String(device.sourceId ?? device.id),
-          label: `${device.label} ${counters[device.label]}`,
-        };
+        const order = counters[device.label];
+        const baseId = String(device.sourceId ?? device.id);
+
+        const cap = device.capabilities && device.capabilities.length > 0 ? device.capabilities[0] : null;
+        const capRu = cap ? (CAPABILITY_DICT[cap] || cap) : "";
+        const label = capRu 
+            ? `${device.label} ${order} (${capRu})` 
+            : `${device.label} ${order}`;
+
+        options.push({
+            id: baseId,
+            label,
+            subTypeLabel: capRu || device.subTypeLabel || device.label,
+            capabilities: device.capabilities || [],
+        });
       });
+    return options;
   }, [selected]);
 
   const selectedSensorTypes = useMemo<RuleDeviceTypeOption[]>(() => {
-    const grouped = new Map<string, string[]>();
+    const capGroups = new Map<string, string[]>();
     selectedSensors.forEach((sensor) => {
-      const baseLabel = sensor.label.replace(/\s\d+$/, "");
-      grouped.set(baseLabel, [...(grouped.get(baseLabel) ?? []), sensor.id]);
+      const baseLabel = sensor.subTypeLabel || sensor.label.replace(/\s\d+$/, "");
+      capGroups.set(baseLabel, [...(capGroups.get(baseLabel) ?? []), sensor.id]);
     });
 
-    return Array.from(grouped.entries()).map(([label, ids]) => ({ label, ids }));
+    return Array.from(capGroups.entries()).map(([label, ids]) => ({ label, ids }));
   }, [selectedSensors]);
 
   const selectedActuatorTypes = useMemo<RuleDeviceTypeOption[]>(() => {
-    const grouped = new Map<string, string[]>();
+    const capGroups = new Map<string, string[]>();
     selectedActuators.forEach((actuator) => {
-      const baseLabel = actuator.label.replace(/\s\d+$/, "");
-      grouped.set(baseLabel, [...(grouped.get(baseLabel) ?? []), actuator.id]);
+      const baseLabel = actuator.subTypeLabel || actuator.label.replace(/\s\d+$/, "");
+      capGroups.set(baseLabel, [...(capGroups.get(baseLabel) ?? []), actuator.id]);
     });
 
-    return Array.from(grouped.entries()).map(([label, ids]) => ({ label, ids }));
+    return Array.from(capGroups.entries()).map(([label, ids]) => ({ label, ids }));
   }, [selectedActuators]);
 
   const selectedRules = useMemo(
@@ -460,6 +514,8 @@ export default function Home() {
       x,
       y,
       sourceId: pending.sourceId,
+      capabilities: pending.capabilities,
+      subTypeLabel: pending.subTypeLabel,
     };
 
     const newPlaced = [...selected.placed, placed];
@@ -539,6 +595,8 @@ export default function Home() {
           color: deviceToRemove.color,
           type: deviceToRemove.type,
           sourceId: deviceToRemove.sourceId,
+          capabilities: deviceToRemove.capabilities,
+          subTypeLabel: deviceToRemove.subTypeLabel,
         },
       ]);
       setActivePlacedId(null);
@@ -788,7 +846,48 @@ export default function Home() {
                       </button>
                     </div>
 
-                    
+                    {project.expanded && project.placed.length > 0 && (
+                      <div style={{ paddingLeft: 16, paddingTop: 6, paddingBottom: 6 }}>
+                        {DEVICE_TYPE_ORDER.map((type) => {
+                          const typedDevices = project.placed.filter((device) => device.type === type);
+                          if (!typedDevices.length) return null;
+                          return (
+                            <div key={`placed-${project.id}-${type}`} style={{ marginBottom: 8 }}>
+                              <span style={{ color: COLORS["green text"], fontSize: 11, textTransform: "lowercase", display: "block", marginBottom: 4, marginLeft: 16 }}>
+                                {DEVICE_TYPE_TITLES[type]} ({typedDevices.length})
+                              </span>
+                              {typedDevices.map((device) => {
+                                const isDeviceActive = activePlacedId === device.id;
+                                return (
+                                  <button
+                                    key={device.id}
+                                    type="button"
+                                    onClick={() => {
+                                      if (selectedId !== project.id) {
+                                        setSelectedId(project.id);
+                                        setPending(null);
+                                      }
+                                      setActivePlacedId(isDeviceActive ? null : device.id);
+                                    }}
+                                    style={{
+                                      ...deviceRowStyle,
+                                      marginLeft: 16,
+                                      background: isDeviceActive ? "rgba(116, 143, 114, 0.3)" : COLORS["device orange"],
+                                      outline: isDeviceActive ? `1px solid ${COLORS["light green text"]}` : "none",
+                                    }}
+                                  >
+                                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: device.color, flexShrink: 0, display: "block" }} />
+                                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                      {device.order}. {device.label}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1048,7 +1147,7 @@ export default function Home() {
                         fontWeight: 500,
                       }}
                     >
-                      {device.currentReading ?? "--"} {SENSOR_UNITS[device.label.replace(/\s\d+$/, "")] ?? ""}
+                      {device.currentReading ?? "--"} {SENSOR_UNITS[device.subTypeLabel || device.label.replace(/\s\d+$/, "")] ?? ""}
                     </span>
                   )}
                 </div>
