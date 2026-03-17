@@ -2,8 +2,16 @@
 
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { COLORS, FONT } from "../types/theme";
+import { 
+  getGreenhouses, 
+  createGreenhouse as apiCreateGreenhouse,
+  updateGreenhouseCanvas,
+  getUnassignedDevices,
+  assignDevice,
+  saveScript
+} from "../lib/api";
 
 type DeviceType = "sensors" | "actuators" | "automation";
 
@@ -12,6 +20,7 @@ type DeviceTemplate = {
   label: string;
   color: string;
   type: DeviceType;
+  sourceId?: number;
 };
 
 type PlacedDevice = {
@@ -23,6 +32,7 @@ type PlacedDevice = {
   x: number;
   y: number;
   currentReading?: string | number;
+  sourceId?: number;
 };
 
 const SENSOR_UNITS: Record<string, string> = {
@@ -88,20 +98,12 @@ const DEVICE_TYPE_COLORS: Record<DeviceType, string> = {
   automation: COLORS["device olive"],
 };
 
-const KNOWN_DEVICES: Array<Omit<DeviceTemplate, "key">> = [
-  { label: "освещенность", color: COLORS["device teal"], type: "sensors" },
-  { label: "влажность", color: COLORS["device olive"], type: "sensors" },
-  { label: "температура", color: COLORS["device orange"], type: "sensors" },
-  { label: "полив", color: COLORS["device teal"], type: "actuators" },
-  { label: "подогрев", color: COLORS["device orange"], type: "actuators" },
-  { label: "проветривание", color: COLORS["device olive"], type: "actuators" },
-  { label: "освещение", color: COLORS["device red"], type: "actuators" },
-  { label: "поддержка скриптов", color: COLORS["device teal"], type: "automation" },
-];
+
 
 export default function Home() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [availableDevices, setAvailableDevices] = useState<DeviceTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState<DeviceTemplate | null>(null);
   const [activePlacedId, setActivePlacedId] = useState<string | null>(null);
@@ -115,6 +117,67 @@ export default function Home() {
   const dragMovedRef = useRef(false);
   const skipPlacementClickRef = useRef(false);
   const [draggingDeviceId, setDraggingDeviceId] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [fetchedGreenhouses, unassigned] = await Promise.all([
+        getGreenhouses(),
+        getUnassignedDevices(),
+      ]);
+
+      setProjects(
+        fetchedGreenhouses.map((gh: any) => {
+          let placed: PlacedDevice[] = [];
+          if (gh.canvas_state) {
+            try {
+              placed = JSON.parse(gh.canvas_state);
+            } catch (e) {
+              console.error("Failed to parse canvas_state", e);
+            }
+          }
+          return {
+            id: String(gh.id),
+            name: gh.name,
+            expanded: true,
+            devices: [],
+            placed,
+          };
+        }),
+      );
+
+      setAvailableDevices(
+        unassigned.map((d: any) => {
+          let type: DeviceType = "sensors";
+          let color: string = COLORS["device teal"];
+          if (d.device_type?.includes("actuator")) {
+             type = "actuators"; color = COLORS["device orange"];
+          } else if (d.device_type?.includes("light")) {
+             type = "actuators"; color = COLORS["device red"];
+          }
+          else if (d.device_type?.includes("automation")) {
+             type = "automation"; color = COLORS["device olive"];
+          }
+          
+          return {
+            key: String(d.id),
+            label: d.name,
+            color,
+            type,
+            sourceId: d.id,
+          };
+        }),
+      );
+    } catch (e) {
+      console.error("Failed to load data", e);
+      if (e instanceof Error && (e.message.includes("403") || e.message.includes("401"))) {
+        router.push("/auth");
+      }
+    }
+  }, [router]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const selected = useMemo(
     () => projects.find((project) => project.id === selectedId) ?? null,
@@ -274,7 +337,24 @@ export default function Home() {
     }));
   };
 
-  const createProject = () => {
+
+  const saveRuleToServer = async (rule: AutomationRule) => {
+    if (!selected) return;
+    try {
+      await saveScript(Number(selected.id), {
+        name: rule.name,
+        script_code: JSON.stringify(rule),
+        enabled: rule.enabled
+      });
+      alert("Правило сохранено на сервере!");
+    } catch (e) {
+      console.error("Failed to save rule", e);
+      alert("Ошибка при сохранении правила");
+    }
+  };
+
+  const createProject = async () => {
+
     const typedName = window.prompt("project name", `teplitsa ${projects.length + 1}`);
     if (typedName === null) {
       return;
@@ -285,22 +365,25 @@ export default function Home() {
       return;
     }
 
-    const projectId = `project-${Date.now()}`;
-    const project: Project = {
-      id: projectId,
-      name,
-      expanded: true,
-      devices: KNOWN_DEVICES.map((device, index) => ({
-        ...device,
-        key: `known-${projectId}-${index}`,
-      })),
-      placed: [],
-    };
+    try {
+      const newGh = await apiCreateGreenhouse({ name });
+      const projectId = String(newGh.id);
+      const project: Project = {
+        id: projectId,
+        name,
+        expanded: true,
+        devices: [],
+        placed: [],
+      };
 
-    setProjects((prev) => [...prev, project]);
-    setSelectedId(projectId);
-    setPending(null);
-    setActivePlacedId(null);
+      setProjects((prev) => [...prev, project]);
+      setSelectedId(projectId);
+      setPending(null);
+      setActivePlacedId(null);
+    } catch (e) {
+      console.error("Failed to create greenhouse", e);
+      alert("Failed to create greenhouse");
+    }
   };
 
   const toggleExpand = (projectId: string) => {
@@ -311,31 +394,51 @@ export default function Home() {
     );
   };
 
-  const placeDevice = (x: number, y: number) => {
-    if (!selected || !pending) {
+  const persistCanvasState = async (projectId: string, newPlaced: PlacedDevice[]) => {
+    try {
+      await updateGreenhouseCanvas(Number(projectId), JSON.stringify(newPlaced));
+    } catch (e) {
+      console.error("Failed to persist canvas", e);
+    }
+  };
+
+  const placeDevice = async (x: number, y: number) => {
+    if (!selected || !pending || !pending.sourceId) {
       return;
     }
 
     const placed: PlacedDevice = {
-      id: `placed-${Date.now()}`,
+      id: String(Date.now()) + Math.random().toString().slice(2, 6),
       label: pending.label,
       color: pending.color,
       type: pending.type,
       order: selected.placed.length + 1,
       x,
       y,
+      sourceId: pending.sourceId,
     };
 
-    setProjects((prev) =>
-      prev.map((project) =>
-        project.id === selected.id
-          ? { ...project, placed: [...project.placed, placed] }
-          : project,
-      ),
-    );
+    const newPlaced = [...selected.placed, placed];
 
-    setActivePlacedId(placed.id);
-    setPending(null);
+    try {
+      await assignDevice(pending.sourceId, Number(selected.id));
+      
+      setProjects((prev) =>
+        prev.map((project) =>
+          project.id === selected.id ? { ...project, placed: newPlaced } : project,
+        ),
+      );
+      
+      setAvailableDevices((prev) => prev.filter((d) => d.sourceId !== pending.sourceId));
+      
+      setActivePlacedId(placed.id);
+      setPending(null);
+
+      await persistCanvasState(selected.id, newPlaced);
+    } catch (e) {
+      console.error("Failed to assign and place device", e);
+      alert("Failed to place device on server");
+    }
   };
 
   const movePlacedDevice = (projectId: string, deviceId: string, x: number, y: number) => {
@@ -353,15 +456,30 @@ export default function Home() {
     );
   };
 
-  const removePlacedDevice = (projectId: string, placedId: string) => {
-    setProjects((prev) =>
-      prev.map((project) =>
-        project.id === projectId
-          ? { ...project, placed: project.placed.filter((device) => device.id !== placedId) }
-          : project,
-      ),
-    );
-    setActivePlacedId(null);
+  const removePlacedDevice = async (projectId: string, placedId: string) => {
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) return;
+    const deviceToRemove = project.placed.find((d) => d.id === placedId);
+    if (!deviceToRemove || !deviceToRemove.sourceId) return;
+
+    const newPlaced = project.placed.filter((device) => device.id !== placedId);
+
+    try {
+      await assignDevice(deviceToRemove.sourceId, null);
+
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId ? { ...p, placed: newPlaced } : p,
+        ),
+      );
+      setActivePlacedId(null);
+      
+      loadData();
+      await persistCanvasState(projectId, newPlaced);
+    } catch (e) {
+      console.error("Failed to remove placed device", e);
+      alert("Failed to remove placed device");
+    }
   };
 
   const beginDragging = (
@@ -400,8 +518,15 @@ export default function Home() {
   };
 
   const handleCanvasPointerUp = () => {
-    if (!draggingRef.current) {
-      return;
+    const dragging = draggingRef.current;
+    if (!dragging) return;
+
+    if (dragMovedRef.current) {
+      const pId = dragging.projectId;
+      const proj = projects.find((p) => p.id === pId);
+      if (proj) {
+         persistCanvasState(pId, proj.placed);
+      }
     }
 
     draggingRef.current = null;
@@ -588,7 +713,7 @@ export default function Home() {
                     {project.expanded && (
                       <div style={{ paddingLeft: 28, paddingBottom: 8 }}>
                         {DEVICE_TYPE_ORDER.map((type) => {
-                          const typedDevices = project.devices.filter((device) => device.type === type);
+                          const typedDevices = availableDevices.filter((device) => device.type === type);
                           if (!typedDevices.length) {
                             return null;
                           }
@@ -604,7 +729,7 @@ export default function Home() {
                                   marginBottom: 4,
                                 }}
                               >
-                                {DEVICE_TYPE_TITLES[type]} ({typedDevices.length})
+                                unassigned {DEVICE_TYPE_TITLES[type]} ({typedDevices.length})
                               </span>
 
                               {typedDevices.map((device) => (
@@ -1640,6 +1765,18 @@ const toggleLabelStyle: CSSProperties = {
   gap: 6,
   color: COLORS["light green text"],
   fontSize: 14,
+};
+
+const saveBtnStyle: CSSProperties = {
+  border: "none",
+  borderRadius: 8,
+  height: 30,
+  padding: "0 10px",
+  background: COLORS.teal,
+  color: COLORS["light green text"],
+  fontFamily: FONT,
+  fontSize: 14,
+  cursor: "pointer",
 };
 
 const dangerBtnStyle: CSSProperties = {

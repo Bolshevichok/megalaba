@@ -95,10 +95,12 @@ class GreenhouseCreate(BaseModel):
     Attributes:
         name: Greenhouse name.
         location: Optional location string.
+        canvas_state: Optional JSON string of frontend UI positions.
     """
 
     name: str = Field(..., max_length=100)
     location: str | None = None
+    canvas_state: str | None = None
 
 
 class GreenhouseUpdate(BaseModel):
@@ -107,10 +109,12 @@ class GreenhouseUpdate(BaseModel):
     Attributes:
         name: New name.
         location: New location.
+        canvas_state: New canvas state JSON string.
     """
 
     name: str | None = None
     location: str | None = None
+    canvas_state: str | None = None
 
 
 class GreenhouseResponse(BaseModel):
@@ -121,12 +125,14 @@ class GreenhouseResponse(BaseModel):
         user_id: Owner user ID.
         name: Greenhouse name.
         location: Location string.
+        canvas_state: UI visual arrangement JSON string.
     """
 
     id: int
     user_id: int
     name: str | None = None
     location: str | None = None
+    canvas_state: str | None = None
 
     model_config = {"from_attributes": True}
 

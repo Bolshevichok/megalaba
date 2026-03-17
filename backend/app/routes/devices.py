@@ -41,6 +41,47 @@ def _get_greenhouse_or_404(
 
 
 @router.get(
+    "/devices/unassigned",
+    response_model=DeviceListResponse,
+)
+def list_unassigned_devices(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """List all devices that are not assigned to any greenhouse."""
+    # We might want to restrict this to admins, but for now any authenticated user can pull them
+    devices = db.query(Device).filter(Device.greenhouse_id == None).all()
+    return {"total": len(devices), "devices": devices}
+
+
+@router.patch(
+    "/devices/{device_id}/assign",
+    response_model=DeviceResponse,
+)
+def assign_device(
+    device_id: int,
+    greenhouse_id: int | None = Query(..., description="Greenhouse to assign to, or null to unassign"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Device:
+    """Assign or unassign a device to a greenhouse."""
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+        
+    if greenhouse_id is not None:
+        _get_greenhouse_or_404(greenhouse_id, current_user, db)
+
+    device.greenhouse_id = greenhouse_id
+    db.commit()
+    db.refresh(device)
+    return device
+
+
+@router.get(
     "/greenhouses/{greenhouse_id}/devices",
     response_model=DeviceListResponse,
 )

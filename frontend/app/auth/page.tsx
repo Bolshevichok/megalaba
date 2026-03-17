@@ -1,13 +1,60 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { COLORS, FONT } from "../../types/theme";
+import { login, registerUser } from "../../lib/api";
 
 type Mode = "login" | "register";
 
 export default function AuthPage() {
+  const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [repeatPassword, setRepeatPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const isLogin = mode === "login";
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (!isLogin && password !== repeatPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        const response = await login({ email, password });
+        if (response.access_token) {
+          localStorage.setItem("token", response.access_token);
+          router.push("/");
+        }
+      } else {
+        const response = await registerUser({ name, email, password });
+        if (response.id) {
+          // Immediately login after register
+          const loginResponse = await login({ email, password });
+          if (loginResponse.access_token) {
+            localStorage.setItem("token", loginResponse.access_token);
+            router.push("/");
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div
@@ -48,25 +95,33 @@ export default function AuthPage() {
         }}
       >
         <div style={{ display: "flex", gap: 8, alignItems: "baseline", justifyContent: "center" }}>
-          <TabButton label="Login" active={isLogin} onClick={() => setMode("login")} />
+          <TabButton label="Login" active={isLogin} onClick={() => { setMode("login"); setError(""); }} />
           <span style={{ color: COLORS["green text"], fontSize: 48, lineHeight: 1 }}>/</span>
-          <TabButton label="Registration" active={!isLogin} onClick={() => setMode("register")} />
+          <TabButton label="Registration" active={!isLogin} onClick={() => { setMode("register"); setError(""); }} />
         </div>
+
+        {error && (
+            <div style={{ color: "red", textAlign: "center", fontSize: 16 }}>{error}</div>
+        )}
 
         <form
           style={{ display: "flex", flexDirection: "column", gap: 12 }}
-          onSubmit={(e) => e.preventDefault()}
+          onSubmit={handleSubmit}
         >
-          <AuthInput placeholder="username" type="text" />
-          <AuthInput placeholder="password" type="password" />
           {!isLogin && (
-            <AuthInput placeholder="repeat password" type="password" />
+            <AuthInput placeholder="name" type="text" value={name} onChange={setName} />
+          )}
+          <AuthInput placeholder="email" type="email" value={email} onChange={setEmail} />
+          <AuthInput placeholder="password" type="password" value={password} onChange={setPassword} />
+          {!isLogin && (
+            <AuthInput placeholder="repeat password" type="password" value={repeatPassword} onChange={setRepeatPassword} />
           )}
 
           <div style={{ height: 22 }} />
 
           <button
             type="submit"
+            disabled={loading}
             style={{
               background: COLORS["teal"],
               border: "none",
@@ -75,12 +130,13 @@ export default function AuthPage() {
               color: COLORS["light green text"],
               fontFamily: FONT,
               fontSize: 24,
-              cursor: "pointer",
+              cursor: loading ? "not-allowed" : "pointer",
               lineHeight: 1.2,
               transition: "filter 0.2s ease",
+              opacity: loading ? 0.7 : 1,
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.15)")}
-            onMouseLeave={(e) => (e.currentTarget.style.filter = "none")}
+            onMouseEnter={(e) => { if (!loading) e.currentTarget.style.filter = "brightness(1.15)"; }}
+            onMouseLeave={(e) => { if (!loading) e.currentTarget.style.filter = "none"; }}
           >
             {isLogin ? "login" : "create user"}
           </button>
@@ -101,6 +157,7 @@ function TabButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       style={{
         background: "none",
@@ -118,7 +175,7 @@ function TabButton({
   );
 }
 
-function AuthInput({ placeholder, type }: { placeholder: string; type: string }) {
+function AuthInput({ placeholder, type, value, onChange }: { placeholder: string; type: string; value: string; onChange: (v: string) => void }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <span
@@ -133,6 +190,9 @@ function AuthInput({ placeholder, type }: { placeholder: string; type: string })
       </span>
       <input
         type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required
         style={{
           background: COLORS["solid back"],
           border: "none",

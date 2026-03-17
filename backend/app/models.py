@@ -118,6 +118,7 @@ class Greenhouse(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=True)
     location = Column(String(255), nullable=True)
+    canvas_state = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="greenhouses")
     devices = relationship("Device", back_populates="greenhouse", cascade="all, delete-orphan")
