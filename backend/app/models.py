@@ -87,9 +87,6 @@ class User(Base):
         name: User display name.
         email: Unique email address.
         password_hash: Bcrypt-hashed password.
-        billing_address: Optional billing address.
-        phone: Optional phone number.
-        greenhouses: Related greenhouses.
     """
 
     __tablename__ = "users"
@@ -98,8 +95,6 @@ class User(Base):
     name = Column(String(100), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    billing_address = Column(Text, nullable=True)
-    phone = Column(String(20), nullable=True)
 
     greenhouses = relationship("Greenhouse", back_populates="user", cascade="all, delete-orphan")
 
@@ -148,7 +143,7 @@ class Device(Base):
     __tablename__ = "devices"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    greenhouse_id = Column(Integer, ForeignKey("greenhouses.id", ondelete="CASCADE"), nullable=False)
+    greenhouse_id = Column(Integer, ForeignKey("greenhouses.id", ondelete="CASCADE"), nullable=True) # Nullable for unassigned devices (Plug&Play)
     name = Column(String(100), nullable=True)
     connection_type = Column(Enum(ConnectionType), nullable=True)
     ip_address = Column(String(50), nullable=True)

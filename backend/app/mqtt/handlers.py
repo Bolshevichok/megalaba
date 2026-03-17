@@ -119,6 +119,14 @@ def handle_sensor_message(
             sensor_type_name,
             payload.get("value"),
         )
+        
+        if device and device.greenhouse_id:
+            try:
+                from app.automation import process_automation_rules
+                process_automation_rules(device.greenhouse_id, db)
+            except Exception as e:
+                logger.error("Error processing automation rules: %s", e)
+                
     except Exception:
         db.rollback()
         logger.exception(

@@ -22,6 +22,13 @@ type PlacedDevice = {
   order: number;
   x: number;
   y: number;
+  currentReading?: string | number;
+};
+
+const SENSOR_UNITS: Record<string, string> = {
+  "освещенность": "lx",
+  "влажность": "%",
+  "температура": "°C",
 };
 
 type Project = {
@@ -843,9 +850,26 @@ export default function Home() {
                     padding: "2px 8px",
                     fontSize: 13,
                     whiteSpace: "nowrap",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
                   }}
                 >
-                  {device.label}
+                  <span>{device.label}</span>
+                  {device.type === "sensors" && (
+                    <span
+                      style={{
+                        background: "rgba(255, 255, 255, 0.1)",
+                        padding: "1px 6px",
+                        borderRadius: 4,
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {device.currentReading ?? "--"} {SENSOR_UNITS[device.label.replace(/\s\d+$/, "")] ?? ""}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
