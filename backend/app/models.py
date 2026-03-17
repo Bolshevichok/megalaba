@@ -121,7 +121,7 @@ class Greenhouse(Base):
     canvas_state = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="greenhouses")
-    devices = relationship("Device", back_populates="greenhouse", cascade="all, delete-orphan")
+    devices = relationship("Device", back_populates="greenhouse")
     scripts = relationship("Script", back_populates="greenhouse", cascade="all, delete-orphan")
 
 

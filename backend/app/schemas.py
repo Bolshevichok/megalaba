@@ -196,12 +196,14 @@ class DeviceResponse(BaseModel):
     """
 
     id: int
-    greenhouse_id: int
+    greenhouse_id: int | None = None
     name: str | None = None
     connection_type: str | None = None
     ip_address: str | None = None
     status: str | None = None
     last_seen: datetime | None = None
+    sensor_count: int = 0
+    actuator_count: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -428,7 +430,7 @@ class ScriptResponse(BaseModel):
     """
 
     id: int
-    greenhouse_id: int
+    greenhouse_id: int | None = None
     name: str | None = None
     script_code: str | None = None
     enabled: bool | None = None

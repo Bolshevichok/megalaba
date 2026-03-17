@@ -7,13 +7,14 @@ import { COLORS, FONT } from "../types/theme";
 import { 
   getGreenhouses, 
   createGreenhouse as apiCreateGreenhouse,
+  deleteGreenhouse as apiDeleteGreenhouse,
   updateGreenhouseCanvas,
   getUnassignedDevices,
   assignDevice,
   saveScript
 } from "../lib/api";
 
-type DeviceType = "sensors" | "actuators" | "automation";
+type DeviceType = "sensors" | "actuators";
 
 type DeviceTemplate = {
   key: string;
@@ -87,15 +88,13 @@ type AutomationRule = {
 const DEVICE_TYPE_TITLES: Record<DeviceType, string> = {
   sensors: "датчики",
   actuators: "актуаторы",
-  automation: "автоматизация",
 };
 
-const DEVICE_TYPE_ORDER: DeviceType[] = ["sensors", "actuators", "automation"];
+const DEVICE_TYPE_ORDER: DeviceType[] = ["sensors", "actuators"];
 
 const DEVICE_TYPE_COLORS: Record<DeviceType, string> = {
   sensors: COLORS["device teal"],
   actuators: COLORS["device orange"],
-  automation: COLORS["device olive"],
 };
 
 
@@ -105,6 +104,7 @@ export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [availableDevices, setAvailableDevices] = useState<DeviceTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [pending, setPending] = useState<DeviceTemplate | null>(null);
   const [activePlacedId, setActivePlacedId] = useState<string | null>(null);
   const [canvasFilter, setCanvasFilter] = useState<DeviceType | "all">("all");
@@ -120,44 +120,57 @@ export default function Home() {
 
   const loadData = useCallback(async () => {
     try {
-      const [fetchedGreenhouses, unassigned] = await Promise.all([
+      const [fetchedGreenhousesResp, unassignedResp] = await Promise.all([
         getGreenhouses(),
         getUnassignedDevices(),
       ]);
 
-      setProjects(
-        fetchedGreenhouses.map((gh: any) => {
-          let placed: PlacedDevice[] = [];
-          if (gh.canvas_state) {
-            try {
-              placed = JSON.parse(gh.canvas_state);
-            } catch (e) {
-              console.error("Failed to parse canvas_state", e);
-            }
-          }
-          return {
-            id: String(gh.id),
-            name: gh.name,
-            expanded: true,
-            devices: [],
-            placed,
-          };
-        }),
-      );
+      const fetchedGreenhouses = fetchedGreenhousesResp.greenhouses || [];
+      const unassigned = unassignedResp.devices || [];
 
+      const newProjects = fetchedGreenhouses.map((gh: any) => {
+        let placed: any[] = [];
+        if (gh.canvas_state) {
+          try {
+            placed = JSON.parse(gh.canvas_state);
+          } catch (e) {
+            console.error("Failed to parse canvas_state", e);
+          }
+        }
+
+        const normalizedPlaced: PlacedDevice[] = placed
+          .filter((item) => item && typeof item === "object")
+          .map((item) => {
+            const legacyType = String(item.type || "");
+            const normalizedType: DeviceType = legacyType === "actuators" ? "actuators" : "sensors";
+            return {
+              ...item,
+              type: normalizedType,
+            };
+          });
+
+        return {
+          id: String(gh.id),
+          name: gh.name,
+          expanded: true,
+          devices: [],
+          placed: normalizedPlaced,
+        };
+      });
+      setProjects(newProjects);
+      
       setAvailableDevices(
         unassigned.map((d: any) => {
           let type: DeviceType = "sensors";
           let color: string = COLORS["device teal"];
-          if (d.device_type?.includes("actuator")) {
-             type = "actuators"; color = COLORS["device orange"];
-          } else if (d.device_type?.includes("light")) {
-             type = "actuators"; color = COLORS["device red"];
+
+         const actuatorCount = Number(d?.actuator_count ?? 0);
+
+          if (actuatorCount > 0 || d?.device_type?.includes("actuator")) {
+            type = "actuators";
+            color = COLORS["device orange"];
           }
-          else if (d.device_type?.includes("automation")) {
-             type = "automation"; color = COLORS["device olive"];
-          }
-          
+
           return {
             key: String(d.id),
             label: d.name,
@@ -167,11 +180,21 @@ export default function Home() {
           };
         }),
       );
+
+      setSelectedId((prev) => {
+        if (!prev && newProjects.length > 0) {
+          return newProjects[0].id;
+        }
+        return prev;
+      });
+
     } catch (e) {
       console.error("Failed to load data", e);
       if (e instanceof Error && (e.message.includes("403") || e.message.includes("401"))) {
         router.push("/auth");
       }
+    } finally {
+      setIsLoading(false);
     }
   }, [router]);
 
@@ -195,7 +218,7 @@ export default function Home() {
       .map((device) => {
         counters[device.label] = (counters[device.label] ?? 0) + 1;
         return {
-          id: device.id,
+          id: String(device.sourceId ?? device.id),
           label: `${device.label} ${counters[device.label]}`,
         };
       });
@@ -212,7 +235,7 @@ export default function Home() {
       .map((device) => {
         counters[device.label] = (counters[device.label] ?? 0) + 1;
         return {
-          id: device.id,
+          id: String(device.sourceId ?? device.id),
           label: `${device.label} ${counters[device.label]}`,
         };
       });
@@ -394,6 +417,27 @@ export default function Home() {
     );
   };
 
+  const deleteProject = async (projectId: string, projectName: string) => {
+    const shouldDelete = window.confirm(`Удалить теплицу \"${projectName}\"?`);
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      await apiDeleteGreenhouse(Number(projectId));
+
+      setProjects((prev) => prev.filter((project) => project.id !== projectId));
+      setSelectedId((prev) => (prev === projectId ? null : prev));
+      setActivePlacedId(null);
+      setPending(null);
+
+      await loadData();
+    } catch (e) {
+      console.error("Failed to delete greenhouse", e);
+      alert("Не удалось удалить теплицу");
+    }
+  };
+
   const persistCanvasState = async (projectId: string, newPlaced: PlacedDevice[]) => {
     try {
       await updateGreenhouseCanvas(Number(projectId), JSON.stringify(newPlaced));
@@ -422,19 +466,30 @@ export default function Home() {
 
     try {
       await assignDevice(pending.sourceId, Number(selected.id));
-      
-      setProjects((prev) =>
-        prev.map((project) =>
-          project.id === selected.id ? { ...project, placed: newPlaced } : project,
-        ),
-      );
-      
+
+      const nextProjects = projects.map((project) => {
+        if (project.id === selected.id) {
+          return { ...project, placed: newPlaced };
+        }
+
+        const filteredPlaced = project.placed.filter((device) => device.sourceId !== pending.sourceId);
+        return filteredPlaced.length === project.placed.length ? project : { ...project, placed: filteredPlaced };
+      });
+
+      setProjects(nextProjects);
+
       setAvailableDevices((prev) => prev.filter((d) => d.sourceId !== pending.sourceId));
       
       setActivePlacedId(placed.id);
       setPending(null);
 
-      await persistCanvasState(selected.id, newPlaced);
+      await Promise.all(
+        nextProjects
+          .filter((project) =>
+            project.id === selected.id || project.placed.length !== projects.find((p) => p.id === project.id)?.placed.length,
+          )
+          .map((project) => persistCanvasState(project.id, project.placed)),
+      );
     } catch (e) {
       console.error("Failed to assign and place device", e);
       alert("Failed to place device on server");
@@ -467,15 +522,35 @@ export default function Home() {
     try {
       await assignDevice(deviceToRemove.sourceId, null);
 
-      setProjects((prev) =>
-        prev.map((p) =>
-          p.id === projectId ? { ...p, placed: newPlaced } : p,
-        ),
-      );
+      const nextProjects = projects.map((project) => {
+        const filteredPlaced = project.placed.filter((device) => device.sourceId !== deviceToRemove.sourceId);
+        if (project.id === projectId) {
+          return { ...project, placed: newPlaced };
+        }
+        return filteredPlaced.length === project.placed.length ? project : { ...project, placed: filteredPlaced };
+      });
+
+      setProjects(nextProjects);
+      setAvailableDevices((prev) => [
+        ...prev.filter((device) => device.sourceId !== deviceToRemove.sourceId),
+        {
+          key: String(deviceToRemove.sourceId),
+          label: deviceToRemove.label,
+          color: deviceToRemove.color,
+          type: deviceToRemove.type,
+          sourceId: deviceToRemove.sourceId,
+        },
+      ]);
       setActivePlacedId(null);
-      
-      loadData();
-      await persistCanvasState(projectId, newPlaced);
+
+      await Promise.all(
+        nextProjects
+          .filter((project) =>
+            project.id === projectId || project.placed.length !== projects.find((p) => p.id === project.id)?.placed.length,
+          )
+          .map((project) => persistCanvasState(project.id, project.placed)),
+      );
+      await loadData();
     } catch (e) {
       console.error("Failed to remove placed device", e);
       alert("Failed to remove placed device");
@@ -537,14 +612,6 @@ export default function Home() {
       skipPlacementClickRef.current = false;
     }, 0);
   };
-
-  const activePlacedDevice = useMemo(() => {
-    if (!selected || !activePlacedId) {
-      return null;
-    }
-
-    return selected.placed.find((device) => device.id === activePlacedId) ?? null;
-  }, [selected, activePlacedId]);
 
   const visiblePlacedDevices = useMemo(() => {
     if (!selected) {
@@ -708,72 +775,50 @@ export default function Home() {
                       >
                         scripts
                       </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          deleteProject(project.id, project.name);
+                        }}
+                        style={deleteProjectBtnStyle}
+                        title="Удалить теплицу"
+                      >
+                        ×
+                      </button>
                     </div>
 
-                    {project.expanded && (
-                      <div style={{ paddingLeft: 28, paddingBottom: 8 }}>
-                        {DEVICE_TYPE_ORDER.map((type) => {
-                          const typedDevices = availableDevices.filter((device) => device.type === type);
-                          if (!typedDevices.length) {
-                            return null;
-                          }
-
-                          return (
-                            <div key={`${project.id}-${type}`} style={{ marginBottom: 8 }}>
-                              <span
-                                style={{
-                                  color: COLORS["green text"],
-                                  fontSize: 11,
-                                  textTransform: "lowercase",
-                                  display: "block",
-                                  marginBottom: 4,
-                                }}
-                              >
-                                unassigned {DEVICE_TYPE_TITLES[type]} ({typedDevices.length})
-                              </span>
-
-                              {typedDevices.map((device) => (
-                                <button
-                                  key={device.key}
-                                  type="button"
-                                  onClick={() => setPending(pending?.key === device.key ? null : device)}
-                                  style={{
-                                    ...deviceRowStyle,
-                                    outline:
-                                      pending?.key === device.key
-                                        ? `2px solid ${COLORS["light green text"]}`
-                                        : "none",
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      width: 8,
-                                      height: 8,
-                                      borderRadius: "50%",
-                                      background: device.color,
-                                      flexShrink: 0,
-                                      display: "block",
-                                    }}
-                                  />
-                                  <span
-                                    style={{
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                      whiteSpace: "nowrap",
-                                    }}
-                                  >
-                                    {device.label}
-                                  </span>
-                                </button>
-                              ))}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                    
                   </div>
                 );
               })}
+
+            {availableDevices.length > 0 && (
+              <div style={{ marginTop: 24, borderTop: "1px solid #1C241C", paddingTop: 10 }}>
+                <p style={{ padding: "8px 16px", color: COLORS["light green text"], fontSize: 16 }}>
+                  непривязанные
+                </p>
+                <div style={{ paddingLeft: 16, paddingBottom: 8 }}>
+                  {DEVICE_TYPE_ORDER.map((type) => {
+                    const typedDevices = availableDevices.filter((device) => device.type === type);
+                    if (!typedDevices.length) return null;
+                    return (
+                      <div key={`unassigned-${type}`} style={{ marginBottom: 8 }}>
+                        <span style={{ color: COLORS["green text"], fontSize: 11, textTransform: "lowercase", display: "block", marginBottom: 4 }}>
+                          {DEVICE_TYPE_TITLES[type]} ({typedDevices.length})
+                        </span>
+                        {typedDevices.map((device) => (
+                          <button key={device.key} type="button" onClick={() => setPending(pending?.key === device.key ? null : device)} style={{ ...deviceRowStyle, outline: pending?.key === device.key ? `2px solid ${COLORS["light green text"]}` : "none" }}>
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: device.color, flexShrink: 0, display: "block" }} />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{device.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             </div>
 
             <div style={{ padding: "10px 14px", borderTop: "1px solid #1C241C" }}>
@@ -818,7 +863,7 @@ export default function Home() {
           >
             <GreenhousePattern visible={!!selected} />
 
-            {!selected && (
+            {!isLoading && !selected && (
               <div
                 style={{
                   position: "absolute",
@@ -922,13 +967,22 @@ export default function Home() {
               <div
                 key={device.id}
                 onPointerDown={(event) => {
+                  if (event.button !== 0) {
+                    return;
+                  }
                   if (!selected) {
                     return;
                   }
                   beginDragging(event, selected.id, device.id);
                 }}
                 onPointerUp={(event) => {
+                  if (event.button !== 0) {
+                    return;
+                  }
                   handleCanvasPointerUp();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
                   event.stopPropagation();
                   if (!dragMovedRef.current) {
                     setActivePlacedId(device.id);
@@ -937,6 +991,7 @@ export default function Home() {
                 onPointerCancel={() => {
                   handleCanvasPointerUp();
                 }}
+                onContextMenu={(event) => event.preventDefault()}
                 style={{
                   position: "absolute",
                   left: `${device.x}%`,
@@ -949,6 +1004,7 @@ export default function Home() {
                   pointerEvents: "auto",
                   cursor: "grab",
                   touchAction: "none",
+                  overflow: "visible",
                 }}
               >
                 <div
@@ -996,47 +1052,22 @@ export default function Home() {
                     </span>
                   )}
                 </div>
+                {activePlacedId === device.id && selected && (
+                  <button
+                    type="button"
+                    style={deviceDeleteButtonStyle}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      removePlacedDevice(selected.id, device.id);
+                    }}
+                    title="Удалить устройство"
+                  >
+                    −
+                  </button>
+                )}
               </div>
             ))}
-
-            {selected && activePlacedDevice && (
-              <div
-                style={{
-                  position: "absolute",
-                  left: `${Math.min(activePlacedDevice.x + 7, 88)}%`,
-                  top: `${Math.max(activePlacedDevice.y - 4, 8)}%`,
-                  transform: "translate(-50%, -50%)",
-                  zIndex: 12,
-                  background: COLORS["panel"],
-                  border: `1px solid ${COLORS["green text"]}`,
-                  borderRadius: 10,
-                  padding: 8,
-                  display: "grid",
-                  gap: 6,
-                  minWidth: 120,
-                  boxShadow: "0 8px 18px rgba(0, 0, 0, 0.35)",
-                }}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  style={deviceMenuButtonStyle}
-                  onClick={() => {
-                    window.alert("Редактирование устройства пока в разработке");
-                  }}
-                >
-                  редактировать
-                </button>
-                <button
-                  type="button"
-                  style={{ ...deviceMenuButtonStyle, background: COLORS["device red"] }}
-                  onClick={() => removePlacedDevice(selected.id, activePlacedDevice.id)}
-                >
-                  удалить
-                </button>
-              </div>
-            )}
           </section>
         </div>
       </div>
@@ -1561,6 +1592,20 @@ const scriptsBtnStyle: CSSProperties = {
   flexShrink: 0,
 };
 
+const deleteProjectBtnStyle: CSSProperties = {
+  border: "none",
+  borderRadius: 8,
+  width: 22,
+  height: 22,
+  background: COLORS["device red"],
+  color: "#fff",
+  fontFamily: FONT,
+  fontSize: 16,
+  lineHeight: 1,
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
 const projectRowStyle: CSSProperties = {
   width: "100%",
   border: "none",
@@ -1627,6 +1672,25 @@ const deviceMenuButtonStyle: CSSProperties = {
   fontSize: 14,
   textAlign: "left",
   cursor: "pointer",
+};
+
+const deviceDeleteButtonStyle: CSSProperties = {
+  border: "2px solid #1D1D1D",
+  width: 28,
+  height: 28,
+  borderRadius: "50%",
+  display: "grid",
+  placeItems: "center",
+  flexShrink: 0,
+  marginLeft: 6,
+  background: COLORS["device red"],
+  color: "#fff",
+  fontFamily: FONT,
+  fontSize: 20,
+  lineHeight: 1,
+  fontWeight: 700,
+  cursor: "pointer",
+  boxShadow: "0 6px 12px rgba(0, 0, 0, 0.35)",
 };
 
 const filterButtonStyle: CSSProperties = {

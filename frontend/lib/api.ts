@@ -21,6 +21,10 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     throw new Error(`API error ${response.status}: ${errText}`);
   }
 
+  if (response.status === 204) {
+    return null;
+  }
+
   return response.json();
 }
 
@@ -45,6 +49,12 @@ export async function updateGreenhouseCanvas(id: number, canvasState: string) {
   });
 }
 
+export async function deleteGreenhouse(id: number) {
+  return fetchWithAuth(`/greenhouses/${id}`, {
+    method: "DELETE",
+  });
+}
+
 // =======================
 // Devices
 // =======================
@@ -57,7 +67,8 @@ export async function getUnassignedDevices() {
 }
 
 export async function assignDevice(deviceId: number, greenhouseId: number | null) {
-  return fetchWithAuth(`/devices/${deviceId}/assign?greenhouse_id=${greenhouseId ?? ""}`, {
+  const qs = greenhouseId !== null ? `?greenhouse_id=${greenhouseId}` : "";
+  return fetchWithAuth(`/devices/${deviceId}/assign${qs}`, {
     method: "PATCH",
   });
 }
