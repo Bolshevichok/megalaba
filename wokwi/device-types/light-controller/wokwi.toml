@@ -1,4 +1,0 @@
-[wokwi]
-version = 1
-firmware = '../../.pio/build/light-controller/firmware.bin'
-elf = '../../.pio/build/light-controller/firmware.elf'

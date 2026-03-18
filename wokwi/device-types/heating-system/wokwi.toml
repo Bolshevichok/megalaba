@@ -1,4 +1,0 @@
-[wokwi]
-version = 1
-firmware = '../../.pio/build/heating-system/firmware.bin'
-elf = '../../.pio/build/heating-system/firmware.elf'

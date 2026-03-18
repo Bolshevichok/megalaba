@@ -32,7 +32,7 @@ def test_create_device(client, auth_headers):
 
     response = client.post(
         f"{API}/greenhouses/{gh_id}/devices",
-        json={"name": "Sensor Hub", "device_type": "full-greenhouse", "connection_type": "wifi"},
+        json={"name": "Sensor Hub", "device_type": "temperature-sensor", "connection_type": "wifi"},
         headers=auth_headers,
     )
     assert response.status_code == 201
@@ -52,12 +52,12 @@ def test_list_devices(client, auth_headers):
 
     client.post(
         f"{API}/greenhouses/{gh_id}/devices",
-        json={"name": "Device-1", "device_type": "climate-sensor", "connection_type": "wifi"},
+        json={"name": "Device-1", "device_type": "temperature-sensor", "connection_type": "wifi"},
         headers=auth_headers,
     )
     client.post(
         f"{API}/greenhouses/{gh_id}/devices",
-        json={"name": "Device-2", "device_type": "light-controller", "connection_type": "ethernet"},
+        json={"name": "Device-2", "device_type": "lighting-actuator", "connection_type": "ethernet"},
         headers=auth_headers,
     )
 
@@ -80,7 +80,7 @@ def test_get_device_detail(client, auth_headers):
 
     create_resp = client.post(
         f"{API}/greenhouses/{gh_id}/devices",
-        json={"name": "Detail Device", "device_type": "heating-system", "connection_type": "zigbee"},
+        json={"name": "Detail Device", "device_type": "heating-actuator", "connection_type": "zigbee"},
         headers=auth_headers,
     )
     dev_id = create_resp.json()["id"]
@@ -103,7 +103,7 @@ def test_delete_device(client, auth_headers):
 
     create_resp = client.post(
         f"{API}/greenhouses/{gh_id}/devices",
-        json={"name": "To Delete", "device_type": "watering-system", "connection_type": "gsm"},
+        json={"name": "To Delete", "device_type": "watering-actuator", "connection_type": "gsm"},
         headers=auth_headers,
     )
     dev_id = create_resp.json()["id"]

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "author": "Smart Greenhouse",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": -4.76, "attrs": {} },
+    { "type": "wokwi-relay-module", "id": "relay1", "top": 240.2, "left": 96, "attrs": {} }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "green", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "green", [] ],
+    [ "relay1:VCC", "esp:5V", "green", [ "h-96.15" ] ],
+    [ "relay1:GND", "esp:GND.1", "green", [ "v-0.4", "h-105.6", "v-115.2" ] ],
+    [ "relay1:IN", "esp:18", "green", [ "v28.6", "h134.4", "v-201.6" ] ]
+  ],
+  "serialMonitor": { "display": "auto" },
+  "dependencies": {}
+}

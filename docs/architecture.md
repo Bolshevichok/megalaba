@@ -235,15 +235,27 @@ services:
 
 ## Реализация: типы устройств и auto-provisioning
 
+### Модульная архитектура IoT-устройств
+
+Система использует **модульный подход** — каждый сенсор и актуатор реализуется как отдельное физическое устройство ESP32. Это позволяет:
+
+- Масштабировать систему, добавляя устройства по мере необходимости
+- Размещать сенсоры и актуаторы в разных зонах теплицы
+- Упростить отладку и тестирование каждого компонента отдельно
+
 ### DEVICE_TYPE_TEMPLATES (models.py)
 
 Словарь-конфиг, определяющий какие сенсоры/актуаторы создаются для каждого типа устройства:
 
 | Тип | Сенсоры | Актуаторы | Wokwi build flag |
 |-----|---------|-----------|------------------|
-| `climate-sensor` | temperature (°C), humidity (%) | — | `-DTYPE_CLIMATE_SENSOR` |
-| `light-controller` | light (lux) | lighting | `-DTYPE_LIGHT_CONTROLLER` |
-| `full-greenhouse` | temperature, humidity, light | lighting | `-DTYPE_FULL_GREENHOUSE` |
+| `temperature-sensor` | temperature (°C) | — | `-DTYPE_TEMPERATURE_SENSOR` |
+| `humidity-sensor` | humidity (%) | — | `-DTYPE_HUMIDITY_SENSOR` |
+| `light-sensor` | light (lux) | — | `-DTYPE_LIGHT_SENSOR` |
+| `watering-actuator` | — | watering | `-DTYPE_WATERING_ACTUATOR` |
+| `heating-actuator` | — | heating | `-DTYPE_HEATING_ACTUATOR` |
+| `ventilation-actuator` | — | ventilation | `-DTYPE_VENTILATION_ACTUATOR` |
+| `lighting-actuator` | — | lighting | `-DTYPE_LIGHTING_ACTUATOR` |
 
 ### Device.provision_by_type(device_type, db)
 
@@ -254,11 +266,26 @@ services:
 
 Публичный эндпоинт — отдаёт фронту список доступных типов с описанием, сенсорами и актуаторами.
 
-### Wokwi: один исходник, условная компиляция
+### Wokwi: модульная архитектура
 
-`wokwi/src/main.cpp` — единый файл для всех типов. Флаги `HAS_DHT`, `HAS_LDR`, `HAS_LED` включают/выключают блоки кода через `#if`. Тип задаётся в `platformio.ini` через `build_flags`.
+`wokwi/src/main.cpp` — единый файл для всех типов. Флаги `HAS_DHT_TEMP`, `HAS_DHT_HUMID`, `HAS_LDR`, `HAS_LED`, `HAS_WATER_PUMP`, `HAS_HEATER`, `HAS_FAN` включают/выключают блоки кода через `#if`. Тип задаётся в `platformio.ini` через `build_flags`.
 
-Каждый тип устройства имеет свою папку в `wokwi/device-types/` с `diagram.json` (схема Wokwi) и `wokwi.toml` (путь к прошивке).
+Каждый тип устройства имеет свою папку в `wokwi/device-types/`:
+```
+wokwi/device-types/
+├── temperature-sensor/    # DHT22 — температура
+├── humidity-sensor/       # DHT22 — влажность
+├── light-sensor/          # LDR — освещённость
+├── watering-actuator/     # Насос — полив
+├── heating-actuator/      # Нагреватель — обогрев
+├── ventilation-actuator/  # Вентилятор — проветривание
+└── lighting-actuator/     # LED — освещение
+```
+
+Каждая папка содержит:
+- `diagram.json` — схема подключения для симулятора Wokwi
+- `wokwi.toml` — путь к скомпилированной прошивке
+- `README.md` — документация устройства
 
 ### Справочные таблицы (seed data)
 

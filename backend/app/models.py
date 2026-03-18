@@ -28,37 +28,46 @@ from app.database import Base
 # Each type defines which sensors and actuators are auto-created.
 # sensor entries: (sensor_type_name, unit)
 # actuator entries: (actuator_type_name,)
+#
+# Модульная архитектура: каждый сенсор/актуатор — отдельное устройство.
 
 DEVICE_TYPE_TEMPLATES: dict[str, dict] = {
-    "climate-sensor": {
-        "description": "DHT22 — temperature + humidity",
-        "sensors": [("temperature", "°C"), ("humidity", "%")],
+    # СЕНСОРЫ
+    "temperature-sensor": {
+        "description": "DHT22 — датчик температуры",
+        "sensors": [("temperature", "°C")],
         "actuators": [],
     },
-    "light-controller": {
-        "description": "LDR + LED — light sensing and control",
-        "sensors": [("light", "lux")],
-        "actuators": [("lighting",)],
-    },
-    "watering-system": {
-        "description": "Soil moisture sensor + water pump — humidity control",
+    "humidity-sensor": {
+        "description": "DHT22 — датчик влажности воздуха",
         "sensors": [("humidity", "%")],
+        "actuators": [],
+    },
+    "light-sensor": {
+        "description": "LDR — датчик освещённости",
+        "sensors": [("light", "lux")],
+        "actuators": [],
+    },
+    # АКТУАТОРЫ
+    "watering-actuator": {
+        "description": "Водяной насос — система полива",
+        "sensors": [],
         "actuators": [("watering",)],
     },
-    "heating-system": {
-        "description": "Temperature sensor + heater — temperature control",
-        "sensors": [("temperature", "°C")],
+    "heating-actuator": {
+        "description": "Нагреватель — система обогрева",
+        "sensors": [],
         "actuators": [("heating",)],
     },
-    "ventilation-system": {
-        "description": "Temperature + humidity sensors + fan — air circulation",
-        "sensors": [("temperature", "°C"), ("humidity", "%")],
+    "ventilation-actuator": {
+        "description": "Вентилятор — система проветривания",
+        "sensors": [],
         "actuators": [("ventilation",)],
     },
-    "full-greenhouse": {
-        "description": "Complete greenhouse automation — all sensors and actuators",
-        "sensors": [("temperature", "°C"), ("humidity", "%"), ("light", "lux")],
-        "actuators": [("lighting",), ("watering",), ("heating",), ("ventilation",)],
+    "lighting-actuator": {
+        "description": "LED — система освещения",
+        "sensors": [],
+        "actuators": [("lighting",)],
     },
 }
 

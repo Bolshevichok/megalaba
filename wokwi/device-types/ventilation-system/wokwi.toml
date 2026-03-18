@@ -1,4 +1,0 @@
-[wokwi]
-version = 1
-firmware = '../../.pio/build/ventilation-system/firmware.bin'
-elf = '../../.pio/build/ventilation-system/firmware.elf'

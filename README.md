@@ -133,10 +133,47 @@ npm start
 ```
 
 #### IoT Разработка
+
+**Компиляция прошивки:**
+```bash
+cd wokwi
+
+# Сборка всех типов устройств
+pio run
+
+# Сборка конкретного типа (сенсоры)
+pio run -e temperature-sensor
+pio run -e humidity-sensor
+pio run -e light-sensor
+
+# Сборка конкретного типа (актуаторы)
+pio run -e watering-actuator
+pio run -e heating-actuator
+pio run -e ventilation-actuator
+pio run -e lighting-actuator
+```
+
+**Запуск в Wokwi:**
 1. Открыть VSCode
 2. Установить расширение Wokwi
-3. Открыть `iot/wokwi/diagram.json`
+3. Открыть `wokwi/device-types/<тип>/diagram.json`
 4. Нажать F1 → "Wokwi: Start Simulator"
+
+**Структура IoT-устройств:**
+```
+wokwi/
+├── src/                      # Исходный код (единый для всех типов)
+│   └── main.cpp
+├── platformio.ini            # Конфигурация PlatformIO
+└── device-types/
+    ├── temperature-sensor/   # Датчик температуры (DHT22)
+    ├── humidity-sensor/      # Датчик влажности (DHT22)
+    ├── light-sensor/         # Датчик освещённости (LDR)
+    ├── watering-actuator/    # Система полива (насос)
+    ├── heating-actuator/     # Обогрев (нагреватель)
+    ├── ventilation-actuator/ # Проветривание (вентилятор)
+    └── lighting-actuator/    # Освещение (LED)
+```
 
 ## 📡 Структура MQTT Топиков
 

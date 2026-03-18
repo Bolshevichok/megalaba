@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "author": "Smart Greenhouse",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": -4.76, "attrs": {} },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": 44.4,
+      "left": 176.6,
+      "attrs": { "color": "white" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "green", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "green", [] ],
+    [ "led1:C", "esp:GND.1", "green", [ "v134.4", "h-201.2", "v-67.2" ] ],
+    [ "led1:A", "esp:2", "green", [ "v76.8", "h-105.6" ] ]
+  ],
+  "serialMonitor": { "display": "auto" },
+  "dependencies": {}
+}

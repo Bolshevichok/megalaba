@@ -151,13 +151,13 @@ class DeviceCreate(BaseModel):
 
     Attributes:
         name: Device name.
-        device_type: Template type (climate-sensor/light-controller/watering-system/heating-system/ventilation-system/full-greenhouse).
+        device_type: Template type (temperature-sensor/humidity-sensor/light-sensor/watering-actuator/heating-actuator/ventilation-actuator/lighting-actuator).
         connection_type: Connection type (wifi/gsm/ethernet/zigbee).
         ip_address: Optional IP address.
     """
 
     name: str = Field(..., max_length=100)
-    device_type: str = Field(..., pattern="^(climate-sensor|light-controller|watering-system|heating-system|ventilation-system|full-greenhouse)$")
+    device_type: str = Field(..., pattern="^(temperature-sensor|humidity-sensor|light-sensor|watering-actuator|heating-actuator|ventilation-actuator|lighting-actuator)$")
     connection_type: str | None = None
     ip_address: str | None = None
 

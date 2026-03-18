@@ -4,17 +4,21 @@
 
 Добавлена папка `wokwi/` с PlatformIO-проектом для ESP32 устройств, которые подключаются к бэкенду через MQTT.
 
-**3 типа устройств (шаблоны):**
+**Модульная архитектура: 7 типов устройств (каждый сенсор/актуатор — отдельное устройство):**
 
-| Тип | Сенсоры | Актуаторы | Папка |
-|-----|---------|-----------|-------|
-| `climate-sensor` | DHT22 (температура + влажность) | — | `wokwi/device-types/climate-sensor/` |
-| `light-controller` | LDR (освещённость) | LED (свет) | `wokwi/device-types/light-controller/` |
-| `full-greenhouse` | DHT22 + LDR | LED | `wokwi/device-types/full-greenhouse/` |
+| Тип | Описание | Сенсоры | Актуаторы | Папка |
+|-----|----------|---------|-----------|-------|
+| `temperature-sensor` | Датчик температуры | DHT22 (температура) | — | `wokwi/device-types/temperature-sensor/` |
+| `humidity-sensor` | Датчик влажности воздуха | DHT22 (влажность) | — | `wokwi/device-types/humidity-sensor/` |
+| `light-sensor` | Датчик освещённости | LDR (люксы) | — | `wokwi/device-types/light-sensor/` |
+| `watering-actuator` | Система полива | — | Насос | `wokwi/device-types/watering-actuator/` |
+| `heating-actuator` | Система обогрева | — | Нагреватель | `wokwi/device-types/heating-actuator/` |
+| `ventilation-actuator` | Система проветривания | — | Вентилятор | `wokwi/device-types/ventilation-actuator/` |
+| `lighting-actuator` | Система освещения | — | LED | `wokwi/device-types/lighting-actuator/` |
 
-Каждый тип — это "класс": `diagram.json` (схема) + `wokwi.toml` (ссылка на прошивку). Один общий исходник `src/main.cpp` с условной компиляцией (`#if HAS_DHT`, `#if HAS_LDR`, `#if HAS_LED`).
+Каждый тип — это отдельная папка с `diagram.json` (схема подключения) + `wokwi.toml` (путь к прошивке). Один общий исходник `src/main.cpp` с условной компиляцией через `#if` флаги (`HAS_DHT_TEMP`, `HAS_DHT_HUMID`, `HAS_LDR`, `HAS_LED`, `HAS_WATER_PUMP`, `HAS_HEATER`, `HAS_FAN`).
 
-**Проверено:** climate-sensor подключён к бэкенду, данные температуры/влажности приходят в БД каждые 5 секунд, отображаются через API и dashboard.
+**Проверено:** устройства подключаются к бэкенду через MQTT, данные приходят в БД каждые 5 секунд, отображаются через API и dashboard.
 
 ---
 
@@ -25,39 +29,24 @@
 На фронте при создании устройства пользователь выбирает **тип**. Каждый тип определяет набор сенсоров и актуаторов:
 
 ```
-climate-sensor    → sensors: [temperature, humidity]
-light-controller  → sensors: [light],           actuators: [lighting]
-full-greenhouse   → sensors: [temperature, humidity, light], actuators: [lighting]
+temperature-sensor    → sensors: [temperature]
+humidity-sensor       → sensors: [humidity]
+light-sensor          → sensors: [light]
+watering-actuator     → actuators: [watering]
+heating-actuator      → actuators: [heating]
+ventilation-actuator  → actuators: [ventilation]
+lighting-actuator     → actuators: [lighting]
 ```
 
 #### 2. API-флоу создания устройства
 
 ```
 POST /api/v1/greenhouses/{id}/devices
-  body: { "name": "My Sensor", "connection_type": "wifi" }
-  → response: { "id": 5, ... }
+  body: { "name": "My Sensor", "device_type": "temperature-sensor", "connection_type": "wifi" }
+  → response: { "id": 5, "name": "My Sensor", "device_type": "temperature-sensor", ... }
 ```
 
-После создания device — привязать сенсоры/актуаторы. Пока через SQL (TODO: сделать API):
-
-```sql
--- Для climate-sensor (device_id=5):
-INSERT INTO sensors (device_id, sensor_type_id, unit) VALUES
-  (5, 1, '°C'),  -- temperature
-  (5, 2, '%');    -- humidity
-
--- Для light-controller (device_id=5):
-INSERT INTO sensors (device_id, sensor_type_id, unit) VALUES
-  (5, 3, 'lux');  -- light
-INSERT INTO actuators (device_id, actuator_type_id, status) VALUES
-  (5, 1, 'off');  -- lighting
-
--- Для full-greenhouse (device_id=5):
-INSERT INTO sensors (device_id, sensor_type_id, unit) VALUES
-  (5, 1, '°C'), (5, 2, '%'), (5, 3, 'lux');
-INSERT INTO actuators (device_id, actuator_type_id, status) VALUES
-  (5, 1, 'off');
-```
+Бэкенд автоматически создаёт сенсоры/актуаторы согласно шаблону типа (`DEVICE_TYPE_TEMPLATES` в `models.py`).
 
 #### 3. Справочник type ID
 
@@ -102,19 +91,50 @@ pip install platformio
 
 # 2. Собрать прошивку (первый раз ~5 мин, потом ~10 сек)
 cd wokwi
-pio run -e climate-sensor
+
+# Сенсоры:
+pio run -e temperature-sensor
+pio run -e humidity-sensor
+pio run -e light-sensor
+
+# Актуаторы:
+pio run -e watering-actuator
+pio run -e heating-actuator
+pio run -e ventilation-actuator
+pio run -e lighting-actuator
 
 # 3. Поднять бэкенд
 docker compose up -d
 
-# 4. Открыть wokwi/device-types/climate-sensor/ в VS Code
+# 4. Открыть wokwi/device-types/<тип>/ в VS Code
 #    F1 → "Wokwi: Start Simulator"
 #    (нужен Wokwi VS Code Extension + API ключ)
 
 # 5. Менять DEVICE_ID в platformio.ini под свой device
 ```
 
+### MQTT топики
+
+#### Сенсоры (ESP32 → Бэкенд)
+- `devices/{id}/sensors/temperature` — температура (°C)
+- `devices/{id}/sensors/humidity` — влажность воздуха (%)
+- `devices/{id}/sensors/light` — освещённость (lux)
+
+#### Актуаторы (Бэкенд → ESP32)
+- `devices/{id}/commands/watering` — команда поливу
+- `devices/{id}/commands/heating` — команда обогреву
+- `devices/{id}/commands/ventilation` — команда вентиляции
+- `devices/{id}/commands/lighting` — команда освещению
+
+#### Статусы (ESP32 → Бэкенд)
+- `devices/{id}/status/watering` — статус полива
+- `devices/{id}/status/heating` — статус обогрева
+- `devices/{id}/status/ventilation` — статус вентиляции
+- `devices/{id}/status/lighting` — статус освещения
+
+---
+
 ### TODO
-- [ ] API для создания сенсоров/актуаторов при создании устройства (сейчас через SQL)
-- [ ] Эндпоинт `/api/v1/device-types` — список доступных типов с их сенсорами/актуаторами
+- [x] API для создания сенсоров/актуаторов при создании устройства (auto-provisioning через `device_type`)
+- [x] Эндпоинт `/api/v1/device-types` — список доступных типов с их сенсорами/актуаторами
 - [ ] На фронте: форма создания устройства с выбором типа

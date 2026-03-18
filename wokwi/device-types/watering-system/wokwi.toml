@@ -1,4 +1,0 @@
-[wokwi]
-version = 1
-firmware = '../../.pio/build/watering-system/firmware.bin'
-elf = '../../.pio/build/watering-system/firmware.elf'

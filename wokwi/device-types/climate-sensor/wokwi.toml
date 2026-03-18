@@ -1,4 +1,0 @@
-[wokwi]
-version = 1
-firmware = '../../.pio/build/climate-sensor/firmware.bin'
-elf = '../../.pio/build/climate-sensor/firmware.elf'

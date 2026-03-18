@@ -4,67 +4,92 @@
 #include <ArduinoJson.h>
 
 // ==================== DEVICE TYPE FLAGS ====================
-// Set via build_flags in platformio.ini:
-//   -DTYPE_CLIMATE_SENSOR   — DHT22 only (temperature + humidity)
-//   -DTYPE_LIGHT_CONTROLLER — LDR + LED (light sensing + lighting control)
-//   -DTYPE_WATERING_SYSTEM  — DHT22 + water pump (humidity control)
-//   -DTYPE_HEATING_SYSTEM   — DHT22 + heater (temperature control)
-//   -DTYPE_VENTILATION_SYSTEM — DHT22 + fan (air circulation)
-//   -DTYPE_FULL_GREENHOUSE  — all sensors + all actuators
+// СЕНСОРЫ:
+//   -DTYPE_TEMPERATURE_SENSOR — датчик температуры
+//   -DTYPE_HUMIDITY_SENSOR    — датчик влажности
+//   -DTYPE_LIGHT_SENSOR       — датчик освещённости
+//
+// АКТУАТОРЫ:
+//   -DTYPE_WATERING_ACTUATOR    — система полива
+//   -DTYPE_HEATING_ACTUATOR     — обогрев
+//   -DTYPE_VENTILATION_ACTUATOR — проветривание
+//   -DTYPE_LIGHTING_ACTUATOR    — освещение
 
-#if defined(TYPE_CLIMATE_SENSOR)
-#define HAS_DHT 1
+#if defined(TYPE_TEMPERATURE_SENSOR)
+#define HAS_DHT_TEMP 1
+#define HAS_DHT_HUMID 0
 #define HAS_LDR 0
-#define HAS_LED 0
 #define HAS_WATER_PUMP 0
 #define HAS_HEATER 0
 #define HAS_FAN 0
-#define DEVICE_TYPE_NAME "climate-sensor"
-#elif defined(TYPE_LIGHT_CONTROLLER)
-#define HAS_DHT 0
+#define HAS_LED 0
+#define DEVICE_TYPE_NAME "temperature-sensor"
+
+#elif defined(TYPE_HUMIDITY_SENSOR)
+#define HAS_DHT_TEMP 0
+#define HAS_DHT_HUMID 1
+#define HAS_LDR 0
+#define HAS_WATER_PUMP 0
+#define HAS_HEATER 0
+#define HAS_FAN 0
+#define HAS_LED 0
+#define DEVICE_TYPE_NAME "humidity-sensor"
+
+#elif defined(TYPE_LIGHT_SENSOR)
+#define HAS_DHT_TEMP 0
+#define HAS_DHT_HUMID 0
 #define HAS_LDR 1
-#define HAS_LED 1
 #define HAS_WATER_PUMP 0
 #define HAS_HEATER 0
 #define HAS_FAN 0
-#define DEVICE_TYPE_NAME "light-controller"
-#elif defined(TYPE_WATERING_SYSTEM)
-#define HAS_DHT 1
-#define HAS_LDR 0
 #define HAS_LED 0
+#define DEVICE_TYPE_NAME "light-sensor"
+
+#elif defined(TYPE_WATERING_ACTUATOR)
+#define HAS_DHT_TEMP 0
+#define HAS_DHT_HUMID 0
+#define HAS_LDR 0
 #define HAS_WATER_PUMP 1
 #define HAS_HEATER 0
 #define HAS_FAN 0
-#define DEVICE_TYPE_NAME "watering-system"
-#elif defined(TYPE_HEATING_SYSTEM)
-#define HAS_DHT 1
-#define HAS_LDR 0
 #define HAS_LED 0
+#define DEVICE_TYPE_NAME "watering-actuator"
+
+#elif defined(TYPE_HEATING_ACTUATOR)
+#define HAS_DHT_TEMP 0
+#define HAS_DHT_HUMID 0
+#define HAS_LDR 0
 #define HAS_WATER_PUMP 0
 #define HAS_HEATER 1
 #define HAS_FAN 0
-#define DEVICE_TYPE_NAME "heating-system"
-#elif defined(TYPE_VENTILATION_SYSTEM)
-#define HAS_DHT 1
-#define HAS_LDR 0
 #define HAS_LED 0
+#define DEVICE_TYPE_NAME "heating-actuator"
+
+#elif defined(TYPE_VENTILATION_ACTUATOR)
+#define HAS_DHT_TEMP 0
+#define HAS_DHT_HUMID 0
+#define HAS_LDR 0
 #define HAS_WATER_PUMP 0
 #define HAS_HEATER 0
 #define HAS_FAN 1
-#define DEVICE_TYPE_NAME "ventilation-system"
-#elif defined(TYPE_FULL_GREENHOUSE)
-#define HAS_DHT 1
-#define HAS_LDR 1
+#define HAS_LED 0
+#define DEVICE_TYPE_NAME "ventilation-actuator"
+
+#elif defined(TYPE_LIGHTING_ACTUATOR)
+#define HAS_DHT_TEMP 0
+#define HAS_DHT_HUMID 0
+#define HAS_LDR 0
+#define HAS_WATER_PUMP 0
+#define HAS_HEATER 0
+#define HAS_FAN 0
 #define HAS_LED 1
-#define HAS_WATER_PUMP 1
-#define HAS_HEATER 1
-#define HAS_FAN 1
-#define DEVICE_TYPE_NAME "full-greenhouse"
+#define DEVICE_TYPE_NAME "lighting-actuator"
+
 #else
-#error "No device type defined! Add one of the -DTYPE_* flags to build_flags"
+#error "Не указан тип устройства! Добавьте один из флагов -DTYPE_* в build_flags"
 #endif
 
-#if HAS_DHT
+#if HAS_DHT_TEMP || HAS_DHT_HUMID
 #include <DHT.h>
 #endif
 
@@ -78,7 +103,6 @@ const int MQTT_PORT = 1883;
 const char *MQTT_USER = "backend";
 const char *MQTT_PASS = "mqtt_secret";
 
-// Device ID — each instance gets its own ID via build flag
 #ifndef DEVICE_ID
 #define DEVICE_ID 1
 #endif
@@ -87,36 +111,48 @@ const unsigned long SEND_INTERVAL = 5000;
 
 // ==================== PINS ====================
 
-#if HAS_DHT
+#if HAS_DHT_TEMP || HAS_DHT_HUMID
 #define DHT_PIN 15
 #endif
+
 #if HAS_LDR
 #define LDR_PIN 34
 #endif
+
 #if HAS_LED
 #define LED_PIN 2
 #endif
+
 #if HAS_WATER_PUMP
 #define WATER_PUMP_PIN 4
 #endif
+
 #if HAS_HEATER
 #define HEATER_PIN 5
 #endif
+
 #if HAS_FAN
 #define FAN_PIN 18
 #endif
 
 // ==================== OBJECTS ====================
 
-#if HAS_DHT
+#if HAS_DHT_TEMP || HAS_DHT_HUMID
 DHT dht(DHT_PIN, DHT22);
 #endif
+
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 
 char topicBuf[64];
 char payloadBuf[128];
 unsigned long lastSend = 0;
+
+// Состояния актуаторов
+bool wateringState = false;
+bool heaterState = false;
+bool fanState = false;
+bool ledState = false;
 
 // ==================== WIFI ====================
 
@@ -160,33 +196,64 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length)
     Serial.printf("[CMD] %s -> %s\n", actuatorType.c_str(), command);
 
     bool turnOn = (strcmp(command, "on") == 0);
+    bool published = false;
 
-    if (actuatorType == "lighting" && HAS_LED)
+#if HAS_WATER_PUMP
+    if (actuatorType == "watering")
     {
-        digitalWrite(LED_PIN, turnOn ? HIGH : LOW);
-        Serial.printf("[LED] %s\n", turnOn ? "ON" : "OFF");
-    }
-    else if (actuatorType == "watering" && HAS_WATER_PUMP)
-    {
+        wateringState = turnOn;
         digitalWrite(WATER_PUMP_PIN, turnOn ? HIGH : LOW);
         Serial.printf("[WATER_PUMP] %s\n", turnOn ? "ON" : "OFF");
+        snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/watering", DEVICE_ID);
+        snprintf(payloadBuf, sizeof(payloadBuf), "{\"status\":\"%s\"}", command);
+        mqtt.publish(topicBuf, payloadBuf);
+        published = true;
     }
-    else if (actuatorType == "heating" && HAS_HEATER)
+#endif
+
+#if HAS_HEATER
+    if (actuatorType == "heating")
     {
+        heaterState = turnOn;
         digitalWrite(HEATER_PIN, turnOn ? HIGH : LOW);
         Serial.printf("[HEATER] %s\n", turnOn ? "ON" : "OFF");
+        snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/heating", DEVICE_ID);
+        snprintf(payloadBuf, sizeof(payloadBuf), "{\"status\":\"%s\"}", command);
+        mqtt.publish(topicBuf, payloadBuf);
+        published = true;
     }
-    else if (actuatorType == "ventilation" && HAS_FAN)
+#endif
+
+#if HAS_FAN
+    if (actuatorType == "ventilation")
     {
+        fanState = turnOn;
         digitalWrite(FAN_PIN, turnOn ? HIGH : LOW);
         Serial.printf("[FAN] %s\n", turnOn ? "ON" : "OFF");
+        snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/ventilation", DEVICE_ID);
+        snprintf(payloadBuf, sizeof(payloadBuf), "{\"status\":\"%s\"}", command);
+        mqtt.publish(topicBuf, payloadBuf);
+        published = true;
     }
+#endif
 
-    // Send status confirmation
-    snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/%s", DEVICE_ID, actuatorType.c_str());
-    snprintf(payloadBuf, sizeof(payloadBuf), "{\"status\":\"%s\"}", command);
-    mqtt.publish(topicBuf, payloadBuf, false);
-    Serial.printf("[MQTT] Status sent: %s\n", topicBuf);
+#if HAS_LED
+    if (actuatorType == "lighting")
+    {
+        ledState = turnOn;
+        digitalWrite(LED_PIN, turnOn ? HIGH : LOW);
+        Serial.printf("[LED] %s\n", turnOn ? "ON" : "OFF");
+        snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/lighting", DEVICE_ID);
+        snprintf(payloadBuf, sizeof(payloadBuf), "{\"status\":\"%s\"}", command);
+        mqtt.publish(topicBuf, payloadBuf);
+        published = true;
+    }
+#endif
+
+    if (published)
+    {
+        Serial.printf("[MQTT] Status sent: %s\n", topicBuf);
+    }
 }
 
 // ==================== MQTT CONNECT ====================
@@ -205,10 +272,16 @@ void connectMQTT()
         {
             Serial.println("[MQTT] Connected!");
 
-            // Subscribe to all actuator command topics for this device
+            // Subscribe to actuator commands
+#if HAS_WATER_PUMP || HAS_HEATER || HAS_FAN || HAS_LED
             snprintf(topicBuf, sizeof(topicBuf), "devices/%d/commands/+", DEVICE_ID);
             mqtt.subscribe(topicBuf, 1);
             Serial.printf("[MQTT] Subscribed to: %s\n", topicBuf);
+#endif
+
+            // Publish online status
+            snprintf(topicBuf, sizeof(topicBuf), "devices/%d/lwt", DEVICE_ID);
+            mqtt.publish(topicBuf, "{\"status\":\"online\"}", false);
         }
         else
         {
@@ -222,25 +295,26 @@ void connectMQTT()
 
 void publishSensors()
 {
-#if HAS_DHT
+#if HAS_DHT_TEMP
     float temperature = dht.readTemperature();
-    float humidity = dht.readHumidity();
-
     if (!isnan(temperature))
     {
         snprintf(topicBuf, sizeof(topicBuf), "devices/%d/sensors/temperature", DEVICE_ID);
         snprintf(payloadBuf, sizeof(payloadBuf), "{\"value\":%.2f}", temperature);
         mqtt.publish(topicBuf, payloadBuf);
+        Serial.printf("[SENSORS] T=%.1f°C\n", temperature);
     }
+#endif
 
+#if HAS_DHT_HUMID
+    float humidity = dht.readHumidity();
     if (!isnan(humidity))
     {
         snprintf(topicBuf, sizeof(topicBuf), "devices/%d/sensors/humidity", DEVICE_ID);
         snprintf(payloadBuf, sizeof(payloadBuf), "{\"value\":%.2f}", humidity);
         mqtt.publish(topicBuf, payloadBuf);
+        Serial.printf("[SENSORS] H=%.1f%%\n", humidity);
     }
-
-    Serial.printf("[SENSORS] T=%.1f°C  H=%.1f%%\n", temperature, humidity);
 #endif
 
 #if HAS_LDR
@@ -250,7 +324,6 @@ void publishSensors()
     snprintf(topicBuf, sizeof(topicBuf), "devices/%d/sensors/light", DEVICE_ID);
     snprintf(payloadBuf, sizeof(payloadBuf), "{\"value\":%.0f}", light);
     mqtt.publish(topicBuf, payloadBuf);
-
     Serial.printf("[SENSORS] L=%.0f lux (raw=%d)\n", light, ldrRaw);
 #endif
 }
@@ -267,24 +340,29 @@ void setup()
     Serial.printf("  Device ID: %d\n", DEVICE_ID);
     Serial.println("========================================");
 
-#if HAS_LED
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, LOW);
-#endif
+    // Инициализация пинов актуаторов
 #if HAS_WATER_PUMP
     pinMode(WATER_PUMP_PIN, OUTPUT);
     digitalWrite(WATER_PUMP_PIN, LOW);
 #endif
+
 #if HAS_HEATER
     pinMode(HEATER_PIN, OUTPUT);
     digitalWrite(HEATER_PIN, LOW);
 #endif
+
 #if HAS_FAN
     pinMode(FAN_PIN, OUTPUT);
     digitalWrite(FAN_PIN, LOW);
 #endif
 
-#if HAS_DHT
+#if HAS_LED
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
+#endif
+
+    // Инициализация сенсоров
+#if HAS_DHT_TEMP || HAS_DHT_HUMID
     dht.begin();
 #endif
 
