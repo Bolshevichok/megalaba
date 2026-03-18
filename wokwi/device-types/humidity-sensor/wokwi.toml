@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = '../../.pio/build/humidity-sensor/firmware.bin'
+elf = '../../.pio/build/humidity-sensor/firmware.elf'

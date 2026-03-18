@@ -3,36 +3,51 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-// ==================== DEVICE TYPE FLAGS ====================
-// Set via build_flags in platformio.ini:
-//   -DTYPE_CLIMATE_SENSOR   — DHT22 only (temperature + humidity)
-//   -DTYPE_LIGHT_CONTROLLER — LDR + LED (light sensing + lighting control)
-//   -DTYPE_FULL_GREENHOUSE  — all sensors + all actuators
+// ==================== DEVICE TYPE (one function per device) ====================
+// Set via build_flags in platformio.ini
 
-#if defined(TYPE_CLIMATE_SENSOR)
-#define HAS_DHT 1
-#define HAS_LDR 0
-#define HAS_LED 0
-#define DEVICE_TYPE_NAME "climate-sensor"
-#elif defined(TYPE_LIGHT_CONTROLLER)
-#define HAS_DHT 0
-#define HAS_LDR 1
-#define HAS_LED 1
-#define DEVICE_TYPE_NAME "light-controller"
-#elif defined(TYPE_FULL_GREENHOUSE)
-#define HAS_DHT 1
-#define HAS_LDR 1
-#define HAS_LED 1
-#define DEVICE_TYPE_NAME "full-greenhouse"
+#if defined(TYPE_TEMPERATURE_SENSOR)
+#define SENSOR_TYPE "temperature"
+#define SENSOR_UNIT "°C"
+#define USE_DHT 1
+#define USE_DHT_TEMPERATURE 1
+#define USE_LDR 0
+#define USE_LED 0
+#define DEVICE_TYPE_NAME "temperature-sensor"
+
+#elif defined(TYPE_HUMIDITY_SENSOR)
+#define SENSOR_TYPE "humidity"
+#define SENSOR_UNIT "%"
+#define USE_DHT 1
+#define USE_DHT_TEMPERATURE 0
+#define USE_LDR 0
+#define USE_LED 0
+#define DEVICE_TYPE_NAME "humidity-sensor"
+
+#elif defined(TYPE_LIGHT_SENSOR)
+#define SENSOR_TYPE "light"
+#define SENSOR_UNIT "lux"
+#define USE_DHT 0
+#define USE_LDR 1
+#define USE_LED 0
+#define DEVICE_TYPE_NAME "light-sensor"
+
+#elif defined(TYPE_LIGHTING_ACTUATOR)
+#define SENSOR_TYPE ""
+#define USE_DHT 0
+#define USE_LDR 0
+#define USE_LED 1
+#define DEVICE_TYPE_NAME "lighting-actuator"
+
 #else
-#error "No device type defined! Add -DTYPE_CLIMATE_SENSOR, -DTYPE_LIGHT_CONTROLLER, or -DTYPE_FULL_GREENHOUSE to build_flags"
+#error "No device type defined! See platformio.ini"
 #endif
 
-#if HAS_DHT
+#if USE_DHT
 #include <DHT.h>
 #endif
 
-// ==================== CONFIGURATION ====================
+// ==================== CONFIG ====================
 
 const char *WIFI_SSID = "Wokwi-GUEST";
 const char *WIFI_PASS = "";
@@ -42,7 +57,6 @@ const int MQTT_PORT = 1883;
 const char *MQTT_USER = "backend";
 const char *MQTT_PASS = "mqtt_secret";
 
-// Device ID — each instance gets its own ID via build flag
 #ifndef DEVICE_ID
 #define DEVICE_ID 1
 #endif
@@ -51,21 +65,19 @@ const unsigned long SEND_INTERVAL = 5000;
 
 // ==================== PINS ====================
 
-#if HAS_DHT
+#if USE_DHT
 #define DHT_PIN 15
+DHT dht(DHT_PIN, DHT22);
 #endif
-#if HAS_LDR
+#if USE_LDR
 #define LDR_PIN 34
 #endif
-#if HAS_LED
+#if USE_LED
 #define LED_PIN 2
 #endif
 
 // ==================== OBJECTS ====================
 
-#if HAS_DHT
-DHT dht(DHT_PIN, DHT22);
-#endif
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 
@@ -77,56 +89,39 @@ unsigned long lastSend = 0;
 
 void connectWiFi()
 {
-    Serial.print("[WiFi] Connecting to ");
-    Serial.println(WIFI_SSID);
+    Serial.print("[WiFi] Connecting...");
     WiFi.begin(WIFI_SSID, WIFI_PASS, 6);
     while (WiFi.status() != WL_CONNECTED)
     {
         delay(500);
         Serial.print(".");
     }
-    Serial.println();
-    Serial.print("[WiFi] Connected, IP: ");
-    Serial.println(WiFi.localIP());
+    Serial.printf(" OK, IP: %s\n", WiFi.localIP().toString().c_str());
 }
 
-// ==================== MQTT CALLBACK ====================
+// ==================== MQTT CALLBACK (actuators only) ====================
 
 void onMqttMessage(char *topic, byte *payload, unsigned int length)
 {
-#if HAS_LED
+#if USE_LED
     payload[length] = '\0';
-    String topicStr = String(topic);
-
-    Serial.printf("[MQTT] Received: %s -> %s\n", topic, (char *)payload);
 
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, (char *)payload);
-    if (err)
-    {
-        Serial.printf("[MQTT] JSON parse error: %s\n", err.c_str());
+    if (deserializeJson(doc, (char *)payload))
         return;
-    }
 
     const char *command = doc["command"];
     if (!command)
         return;
 
-    String actuatorType = topicStr.substring(topicStr.lastIndexOf('/') + 1);
-    Serial.printf("[CMD] %s -> %s\n", actuatorType.c_str(), command);
+    bool turnOn = (strcmp(command, "on") == 0);
+    digitalWrite(LED_PIN, turnOn ? HIGH : LOW);
+    Serial.printf("[LED] %s\n", turnOn ? "ON" : "OFF");
 
-    if (actuatorType == "lighting")
-    {
-        bool turnOn = (strcmp(command, "on") == 0);
-        digitalWrite(LED_PIN, turnOn ? HIGH : LOW);
-        Serial.printf("[LED] %s\n", turnOn ? "ON" : "OFF");
-    }
-
-    // Send status confirmation
-    snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/%s", DEVICE_ID, actuatorType.c_str());
+    // Confirm status
+    snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/lighting", DEVICE_ID);
     snprintf(payloadBuf, sizeof(payloadBuf), "{\"status\":\"%s\"}", command);
     mqtt.publish(topicBuf, payloadBuf, false);
-    Serial.printf("[MQTT] Status sent: %s\n", topicBuf);
 #else
     (void)topic;
     (void)payload;
@@ -150,54 +145,61 @@ void connectMQTT()
         {
             Serial.println("[MQTT] Connected!");
 
-#if HAS_LED
+            // Announce online status
+            snprintf(topicBuf, sizeof(topicBuf), "devices/%d/lwt", DEVICE_ID);
+            mqtt.publish(topicBuf, "{\"status\":\"online\"}", false);
+
+#if USE_LED
             snprintf(topicBuf, sizeof(topicBuf), "devices/%d/commands/+", DEVICE_ID);
             mqtt.subscribe(topicBuf, 1);
-            Serial.printf("[MQTT] Subscribed to: %s\n", topicBuf);
+            Serial.printf("[MQTT] Subscribed: %s\n", topicBuf);
 #endif
         }
         else
         {
-            Serial.printf("[MQTT] Failed, rc=%d. Retry in 3s...\n", mqtt.state());
+            Serial.printf("[MQTT] Failed rc=%d, retry 3s...\n", mqtt.state());
             delay(3000);
         }
     }
 }
 
-// ==================== PUBLISH SENSORS ====================
+// ==================== PUBLISH (sensors only) ====================
 
-void publishSensors()
+void publishSensor()
 {
-#if HAS_DHT
-    float temperature = dht.readTemperature();
-    float humidity = dht.readHumidity();
-
-    if (!isnan(temperature))
-    {
-        snprintf(topicBuf, sizeof(topicBuf), "devices/%d/sensors/temperature", DEVICE_ID);
-        snprintf(payloadBuf, sizeof(payloadBuf), "{\"value\":%.2f}", temperature);
-        mqtt.publish(topicBuf, payloadBuf);
+#if USE_DHT && USE_DHT_TEMPERATURE
+    float val = dht.readTemperature();
+    if (isnan(val))
+        return;
+    Serial.printf("[SENSOR] temperature = %.1f°C\n", val);
+#elif USE_DHT
+    float val = dht.readHumidity();
+    if (isnan(val))
+        return;
+    Serial.printf("[SENSOR] humidity = %.1f%%\n", val);
+#elif USE_LDR
+    int raw = analogRead(LDR_PIN);
+    // Wokwi photoresistor-sensor: formula from docs adapted for 3.3V
+    // Circuit: VCC -> 10K -> AO -> LDR -> GND
+    // R_ldr = 10000 * voltage / (VCC - voltage)
+    const float GAMMA = 0.7;
+    const float RL10 = 50; // kOhm at 10 lux
+    const float VCC = 3.3;
+    float voltage = raw / 4095.0 * VCC;
+    float val = 0;
+    if (voltage > 0.01 && voltage < (VCC - 0.01)) {
+        float resistance = 10000.0 * voltage / (VCC - voltage);
+        val = pow(RL10 * 1e3 * pow(10, GAMMA) / resistance, 1.0 / GAMMA);
     }
-
-    if (!isnan(humidity))
-    {
-        snprintf(topicBuf, sizeof(topicBuf), "devices/%d/sensors/humidity", DEVICE_ID);
-        snprintf(payloadBuf, sizeof(payloadBuf), "{\"value\":%.2f}", humidity);
-        mqtt.publish(topicBuf, payloadBuf);
-    }
-
-    Serial.printf("[SENSORS] T=%.1f°C  H=%.1f%%\n", temperature, humidity);
+    Serial.printf("[SENSOR] light = %.0f lux (raw=%d, V=%.2f)\n", val, raw, voltage);
+#else
+    return;
 #endif
 
-#if HAS_LDR
-    int ldrRaw = analogRead(LDR_PIN);
-    float light = map(ldrRaw, 0, 4095, 0, 1000);
-
-    snprintf(topicBuf, sizeof(topicBuf), "devices/%d/sensors/light", DEVICE_ID);
-    snprintf(payloadBuf, sizeof(payloadBuf), "{\"value\":%.0f}", light);
+#if !USE_LED
+    snprintf(topicBuf, sizeof(topicBuf), "devices/%d/sensors/%s", DEVICE_ID, SENSOR_TYPE);
+    snprintf(payloadBuf, sizeof(payloadBuf), "{\"value\":%.2f}", val);
     mqtt.publish(topicBuf, payloadBuf);
-
-    Serial.printf("[SENSORS] L=%.0f lux (raw=%d)\n", light, ldrRaw);
 #endif
 }
 
@@ -209,21 +211,18 @@ void setup()
     delay(100);
 
     Serial.println("========================================");
-    Serial.printf("  Smart Greenhouse ESP32 — %s\n", DEVICE_TYPE_NAME);
-    Serial.printf("  Device ID: %d\n", DEVICE_ID);
+    Serial.printf("  %s  (device %d)\n", DEVICE_TYPE_NAME, DEVICE_ID);
     Serial.println("========================================");
 
-#if HAS_LED
+#if USE_LED
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
 #endif
-
-#if HAS_DHT
+#if USE_DHT
     dht.begin();
 #endif
 
     connectWiFi();
-
     mqtt.setServer(MQTT_SERVER, MQTT_PORT);
     mqtt.setCallback(onMqttMessage);
     mqtt.setBufferSize(512);
@@ -235,7 +234,6 @@ void loop()
 {
     if (WiFi.status() != WL_CONNECTED)
         connectWiFi();
-
     if (!mqtt.connected())
         connectMQTT();
 
@@ -243,7 +241,7 @@ void loop()
 
     if (millis() - lastSend >= SEND_INTERVAL)
     {
-        publishSensors();
+        publishSensor();
         lastSend = millis();
     }
 }

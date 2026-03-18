@@ -275,25 +275,27 @@ async def general_exception_handler(request: Request, exc: Exception):
 from app.routes.actuators import router as actuators_router  # noqa: E402
 from app.routes.auth import router as auth_router  # noqa: E402
 from app.routes.dashboard import router as dashboard_router  # noqa: E402
-from app.routes.device_types import router as device_types_router  # noqa: E402
+
 from app.routes.devices import router as devices_router  # noqa: E402
 from app.routes.greenhouses import router as greenhouses_router  # noqa: E402
 from app.routes.health import router as health_router  # noqa: E402
 from app.routes.scripts import router as scripts_router  # noqa: E402
 from app.routes.sensors import router as sensors_router  # noqa: E402
-from app.routes.simulator import router as simulator_router  # noqa: E402
+from app.routes.device_types import router as device_types_router  # noqa: E402
+
 from app.websocket import ws_manager  # noqa: E402
 
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(greenhouses_router, prefix="/api/v1")
-app.include_router(device_types_router, prefix="/api/v1")
+
 app.include_router(devices_router, prefix="/api/v1")
 app.include_router(sensors_router, prefix="/api/v1")
 app.include_router(actuators_router, prefix="/api/v1")
 app.include_router(scripts_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
-app.include_router(simulator_router, prefix="/api/v1")
+app.include_router(device_types_router, prefix="/api/v1")
+
 
 
 @app.websocket("/ws/greenhouse/{greenhouse_id}")

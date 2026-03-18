@@ -11,6 +11,42 @@ from app.schemas import DeviceCreate, DeviceListResponse, DeviceResponse, Device
 router = APIRouter(tags=["devices"])
 
 
+def _serialize_device(device: Device) -> dict:
+    """Serialize device with capability counts used by frontend automation UI."""
+    return {
+        "id": device.id,
+        "greenhouse_id": device.greenhouse_id,
+        "name": device.name,
+        "connection_type": device.connection_type.value if device.connection_type else None,
+        "ip_address": device.ip_address,
+        "status": device.status.value if device.status else None,
+        "last_seen": device.last_seen,
+        "sensor_count": len(device.sensors or []),
+        "actuator_count": len(device.actuators or []),
+        "sensors": [
+            {
+                "id": s.id,
+                "device_id": s.device_id,
+                "sensor_type_id": s.sensor_type_id,
+                "name": s.name,
+                "unit": s.unit,
+                "type_name": s.sensor_type.name if s.sensor_type else None
+            }
+            for s in (device.sensors or [])
+        ],
+        "actuators": [
+            {
+                "id": a.id,
+                "device_id": a.device_id,
+                "actuator_type_id": a.actuator_type_id,
+                "status": a.status.value if a.status else None,
+                "type_name": a.actuator_type.name if a.actuator_type else None
+            }
+            for a in (device.actuators or [])
+        ]
+    }
+
+
 def _get_greenhouse_or_404(
     greenhouse_id: int, user: User, db: Session
 ) -> Greenhouse:
@@ -41,6 +77,56 @@ def _get_greenhouse_or_404(
 
 
 @router.get(
+    "/devices/unassigned",
+    response_model=DeviceListResponse,
+)
+def list_unassigned_devices(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """List all devices that are not assigned to any greenhouse."""
+    # We might want to restrict this to admins, but for now any authenticated user can pull them
+    devices = (
+        db.query(Device)
+        .options(
+            joinedload(Device.sensors).joinedload(Sensor.sensor_type),
+            joinedload(Device.actuators).joinedload(Actuator.actuator_type),
+        )
+        .filter(Device.greenhouse_id == None)
+        .all()
+    )
+    return {"total": len(devices), "devices": [_serialize_device(d) for d in devices]}
+
+
+@router.patch(
+    "/devices/{device_id}/assign",
+    response_model=DeviceResponse,
+)
+def assign_device(
+    device_id: int,
+    greenhouse_id: int | None = Query(None, description="Greenhouse to assign to, or null to unassign"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Device:
+    """Assign or unassign a device to a greenhouse."""
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+        
+    if greenhouse_id is not None:
+        _get_greenhouse_or_404(greenhouse_id, current_user, db)
+
+    device.greenhouse_id = greenhouse_id
+    db.commit()
+    db.refresh(device)
+    db.refresh(device)
+    return _serialize_device(device)
+
+
+@router.get(
     "/greenhouses/{greenhouse_id}/devices",
     response_model=DeviceListResponse,
 )
@@ -63,12 +149,19 @@ def list_devices(
     """
     greenhouse = _get_greenhouse_or_404(greenhouse_id, current_user, db)
 
-    query = db.query(Device).filter(Device.greenhouse_id == greenhouse.id)
+    query = (
+        db.query(Device)
+        .options(
+            joinedload(Device.sensors).joinedload(Sensor.sensor_type),
+            joinedload(Device.actuators).joinedload(Actuator.actuator_type),
+        )
+        .filter(Device.greenhouse_id == greenhouse.id)
+    )
     if status_filter is not None:
         query = query.filter(Device.status == status_filter)
 
     devices = query.all()
-    return {"total": len(devices), "devices": devices}
+    return {"total": len(devices), "devices": [_serialize_device(d) for d in devices]}
 
 
 @router.get(
@@ -111,7 +204,7 @@ def get_device(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not found",
         )
-    return device
+    return _serialize_device(device)
 
 
 @router.post(
@@ -151,7 +244,7 @@ def create_device(
 
     db.commit()
     db.refresh(device)
-    return device
+    return _serialize_device(device)
 
 
 @router.put(
@@ -199,7 +292,7 @@ def update_device(
 
     db.commit()
     db.refresh(device)
-    return device
+    return _serialize_device(device)
 
 
 @router.delete(

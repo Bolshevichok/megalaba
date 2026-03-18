@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = '../../.pio/build/temperature-sensor/firmware.bin'
+elf = '../../.pio/build/temperature-sensor/firmware.elf'

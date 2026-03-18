@@ -14,7 +14,9 @@ from app.database import SessionLocal
 from app.models import (
     Actuator,
     ActuatorCommand,
+    ActuatorStatus,
     ActuatorType,
+    ConnectionType,
     Device,
     DeviceStatus,
     Sensor,
@@ -23,6 +25,87 @@ from app.models import (
 )
 
 logger = logging.getLogger("greenhouse.mqtt")
+
+
+def _get_or_create_device(db: Session, device_id: int) -> Device:
+    """Fetch existing device or create an unassigned placeholder from MQTT traffic."""
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if device is not None:
+        return device
+
+    device = Device(
+        id=device_id,
+        greenhouse_id=None,
+        name=f"MQTT device {device_id}",
+        connection_type=ConnectionType.wifi,
+        status=DeviceStatus.online,
+        last_seen=datetime.now(timezone.utc),
+    )
+    db.add(device)
+    db.flush()
+    logger.info("Auto-created MQTT device id=%s", device_id)
+    return device
+
+
+def _get_or_create_sensor(
+    db: Session,
+    device_id: int,
+    sensor_type_id: int,
+    sensor_type_name: str,
+) -> Sensor:
+    """Fetch existing sensor or create one when device publishes unknown telemetry."""
+    sensor = (
+        db.query(Sensor)
+        .filter(Sensor.device_id == device_id, Sensor.sensor_type_id == sensor_type_id)
+        .first()
+    )
+    if sensor is not None:
+        return sensor
+
+    unit = ""
+    if sensor_type_name == "temperature":
+        unit = "°C"
+    elif sensor_type_name == "humidity":
+        unit = "%"
+    elif sensor_type_name == "light":
+        unit = "lux"
+
+    sensor = Sensor(
+        device_id=device_id,
+        sensor_type_id=sensor_type_id,
+        name=sensor_type_name,
+        unit=unit,
+    )
+    db.add(sensor)
+    db.flush()
+    logger.info("Auto-created sensor for device=%s type=%s", device_id, sensor_type_name)
+    return sensor
+
+
+def _get_or_create_actuator(
+    db: Session,
+    device_id: int,
+    actuator_type_id: int,
+    actuator_type_name: str,
+) -> Actuator:
+    """Fetch existing actuator or create one when status arrives for unknown actuator."""
+    actuator = (
+        db.query(Actuator)
+        .filter(Actuator.device_id == device_id, Actuator.actuator_type_id == actuator_type_id)
+        .first()
+    )
+    if actuator is not None:
+        return actuator
+
+    actuator = Actuator(
+        device_id=device_id,
+        actuator_type_id=actuator_type_id,
+        status=ActuatorStatus.off,
+    )
+    db.add(actuator)
+    db.flush()
+    logger.info("Auto-created actuator for device=%s type=%s", device_id, actuator_type_name)
+    return actuator
 
 
 def on_message(client, userdata, message) -> None:
@@ -54,7 +137,7 @@ def on_message(client, userdata, message) -> None:
         actuator_type_name = parts[3]
         handle_status_message(device_id_str, actuator_type_name, payload_str)
     elif category == "lwt":
-        handle_lwt_message(device_id_str)
+        handle_lwt_message(device_id_str, payload_str)
     else:
         logger.warning("Unhandled topic category '%s' in topic: %s", category, topic)
 
@@ -78,6 +161,10 @@ def handle_sensor_message(
         payload = json.loads(payload_str)
         device_id = int(device_id_str)
 
+        device = _get_or_create_device(db, device_id)
+        if device.name in (None, "", f"MQTT device {device_id}"):
+            device.name = f"MQTT sensor {device_id}"
+
         sensor_type = (
             db.query(SensorType).filter(SensorType.name == sensor_type_name).first()
         )
@@ -85,21 +172,7 @@ def handle_sensor_message(
             logger.warning("Unknown sensor type: %s", sensor_type_name)
             return
 
-        sensor = (
-            db.query(Sensor)
-            .filter(
-                Sensor.device_id == device_id,
-                Sensor.sensor_type_id == sensor_type.id,
-            )
-            .first()
-        )
-        if sensor is None:
-            logger.warning(
-                "Sensor not found for device %s type %s",
-                device_id_str,
-                sensor_type_name,
-            )
-            return
+        sensor = _get_or_create_sensor(db, device_id, sensor_type.id, sensor_type_name)
 
         reading = SensorReading(
             sensor_id=sensor.id,
@@ -111,6 +184,7 @@ def handle_sensor_message(
         device = db.query(Device).filter(Device.id == device_id).first()
         if device:
             device.last_seen = datetime.now(timezone.utc)
+            device.status = "online"
 
         db.commit()
         logger.info(
@@ -119,6 +193,33 @@ def handle_sensor_message(
             sensor_type_name,
             payload.get("value"),
         )
+        
+        if device and device.greenhouse_id:
+            try:
+                from app.automation import process_automation_rules
+                process_automation_rules(device.greenhouse_id, db)
+            except Exception as e:
+                logger.error("Error processing automation rules: %s", e)
+
+            try:
+                import asyncio
+                from app.websocket import ws_manager
+                loop = asyncio.get_event_loop()
+                loop.call_soon_threadsafe(
+                    asyncio.ensure_future,
+                    ws_manager.broadcast(device.greenhouse_id, {
+                        "type": "sensor_update",
+                        "data": {
+                            "device_id": device_id,
+                            "sensor_type": sensor_type_name,
+                            "value": payload.get("value"),
+                            "device_status": "online",
+                        },
+                    }),
+                )
+            except Exception as e:
+                logger.debug("WS broadcast skipped: %s", e)
+                
     except Exception:
         db.rollback()
         logger.exception(
@@ -147,6 +248,10 @@ def handle_status_message(
         payload = json.loads(payload_str)
         device_id = int(device_id_str)
 
+        device = _get_or_create_device(db, device_id)
+        if device.name in (None, "", f"MQTT device {device_id}"):
+            device.name = f"MQTT actuator {device_id}"
+
         actuator_type = (
             db.query(ActuatorType)
             .filter(ActuatorType.name == actuator_type_name)
@@ -156,21 +261,7 @@ def handle_status_message(
             logger.warning("Unknown actuator type: %s", actuator_type_name)
             return
 
-        actuator = (
-            db.query(Actuator)
-            .filter(
-                Actuator.device_id == device_id,
-                Actuator.actuator_type_id == actuator_type.id,
-            )
-            .first()
-        )
-        if actuator is None:
-            logger.warning(
-                "Actuator not found for device %s type %s",
-                device_id_str,
-                actuator_type_name,
-            )
-            return
+        actuator = _get_or_create_actuator(db, device_id, actuator_type.id, actuator_type_name)
 
         new_status = payload.get("status")
         if new_status:
@@ -205,26 +296,30 @@ def handle_status_message(
         db.close()
 
 
-def handle_lwt_message(device_id_str: str) -> None:
-    """Handle a Last Will and Testament (LWT) message.
-
-    Sets the device status to offline when the MQTT broker publishes
-    the device's LWT message (indicating unexpected disconnection).
+def handle_lwt_message(device_id_str: str, payload_str: str = "") -> None:
+    """Handle a Last Will and Testament (LWT) or online announcement message.
 
     Args:
         device_id_str: Device ID as a string from the MQTT topic.
+        payload_str: JSON payload, may contain {"status": "online"} or {"status": "offline"}.
     """
     db: Session = SessionLocal()
     try:
         device_id = int(device_id_str)
-        device = db.query(Device).filter(Device.id == device_id).first()
-        if device is None:
-            logger.warning("Device not found for LWT: %s", device_id_str)
-            return
+        device = _get_or_create_device(db, device_id)
 
-        device.status = DeviceStatus.offline
+        status = DeviceStatus.offline
+        try:
+            data = json.loads(payload_str)
+            if data.get("status") == "online":
+                status = DeviceStatus.online
+        except Exception:
+            pass
+
+        device.status = status
+        device.last_seen = datetime.now(timezone.utc)
         db.commit()
-        logger.info("Device %s marked as offline via LWT", device_id_str)
+        logger.info("Device %s marked as %s via LWT", device_id_str, status.value)
     except Exception:
         db.rollback()
         logger.exception("Error handling LWT message for device %s", device_id_str)
