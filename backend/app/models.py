@@ -40,10 +40,25 @@ DEVICE_TYPE_TEMPLATES: dict[str, dict] = {
         "sensors": [("light", "lux")],
         "actuators": [("lighting",)],
     },
+    "watering-system": {
+        "description": "Soil moisture sensor + water pump — humidity control",
+        "sensors": [("humidity", "%")],
+        "actuators": [("watering",)],
+    },
+    "heating-system": {
+        "description": "Temperature sensor + heater — temperature control",
+        "sensors": [("temperature", "°C")],
+        "actuators": [("heating",)],
+    },
+    "ventilation-system": {
+        "description": "Temperature + humidity sensors + fan — air circulation",
+        "sensors": [("temperature", "°C"), ("humidity", "%")],
+        "actuators": [("ventilation",)],
+    },
     "full-greenhouse": {
-        "description": "DHT22 + LDR + LED — all sensors and actuators",
+        "description": "Complete greenhouse automation — all sensors and actuators",
         "sensors": [("temperature", "°C"), ("humidity", "%"), ("light", "lux")],
-        "actuators": [("lighting",)],
+        "actuators": [("lighting",), ("watering",), ("heating",), ("ventilation",)],
     },
 }
 

@@ -1,113 +1,153 @@
-# IoT Smart Greenhouse Monitoring System
+# IoT Система Мониторинга Умной Теплицы
 
-A complete IoT-based smart greenhouse monitoring and control system with real-time sensor data collection, actuator control, and web-based user interface.
+Полнофункциональная IoT-система мониторинга и управления умной теплицей с сбором данных датчиков в реальном времени, управлением исполнительными устройствами и веб-интерфейсом.
 
-## 🌱 Overview
+## 🌱 Обзор
 
-This project implements an end-to-end IoT solution for monitoring and controlling greenhouse environments. The system enables:
+Этот проект реализует комплексное IoT-решение для мониторинга и управления окружающей средой теплицы. Система обеспечивает:
 
-- **Real-time Monitoring**: Track temperature, humidity, and light levels
-- **Remote Control**: Control heating, lighting, ventilation, and irrigation systems
-- **Web Interface**: User-friendly dashboard for visualization and control
-- **Multi-Device Support**: Manage multiple greenhouse units simultaneously
-- **Historical Data**: View trends and analytics over time
+- **Мониторинг в реальном времени**: Отслеживание температуры, влажности и уровня освещенности
+- **Удаленное управление**: Контроль систем отопления, освещения, вентиляции и полива
+- **Веб-интерфейс**: Удобная панель управления для визуализации и контроля
+- **Поддержка множества устройств**: Управление несколькими тепличными комплексами одновременно
+- **Исторические данные**: Просмотр трендов и аналитики за период времени
 
-## 🏗️ Architecture
+## 🏗️ Архитектура
 
 ```
-User → Frontend (React/TS) → Backend (FastAPI/Python) → Database (PostgreSQL)
+Пользователь → Фронтенд (React/TS) → Бэкенд (FastAPI/Python) → База данных (PostgreSQL)
                                     ↕ MQTT
-                            MQTT Broker (Mosquitto)
+                            MQTT Брокер (Mosquitto)
                                     ↕ MQTT
-                            IoT Devices (ESP32)
+                            IoT Устройства (ESP32)
 ```
 
-### Key Components
+### Ключевые Компоненты
 
-- **Frontend**: React + TypeScript with real-time data visualization
-- **Backend**: FastAPI (Python) with REST API and MQTT client
-- **MQTT Broker**: Eclipse Mosquitto for IoT communication
-- **Database**: PostgreSQL for data persistence
-- **IoT Devices**: ESP32 microcontrollers (Wokwi simulator)
+- **Фронтенд**: React + TypeScript с визуализацией данных в реальном времени
+- **Бэкенд**: FastAPI (Python) с REST API и MQTT клиентом
+- **MQTT Брокер**: Eclipse Mosquitto для IoT коммуникаций
+- **База данных**: PostgreSQL для хранения данных
+- **IoT Устройства**: Микроконтроллеры ESP32 (симулятор Wokwi)
 
-## 📚 Documentation
+## 📚 Документация
 
-Comprehensive documentation is available in the [`docs/`](./docs/) directory:
+Подробная документация доступна в директории [`docs/`](./docs/):
 
-- **[Project Summary](./docs/project_summary.md)** - High-level overview and current status
-- **[Architecture](./docs/architecture.md)** - Detailed system architecture and design
-- **[Database Design](./docs/database_design.md)** - Database schema and data models
-- **[API Specification](./docs/api_specification.md)** - REST API endpoints and usage
-- **[Implementation Plan](./docs/implementation_plan.md)** - Detailed task breakdown and timeline
+- **[Сводка проекта](./docs/project_summary.md)** - Общий обзор и текущий статус
+- **[Архитектура](./docs/architecture.md)** - Детальная архитектура системы и дизайн
+- **[Дизайн базы данных](./docs/database_design.md)** - Схема базы данных и модели данных
+- **[Спецификация API](./docs/api_specification.md)** - Конечные точки REST API и их использование
+- **[План реализации](./docs/implementation_plan.md)** - Детальная разбивка задач и сроки
 
-## 🚀 Quick Start
+## 🚀 Быстрый Старт
 
-### Prerequisites
+### Предварительные Требования
 
 - Docker & Docker Compose
-- Python 3.11+ (for local development)
-- Node.js 18+ (for frontend development)
-- VSCode with Wokwi extension (for IoT development)
+- Python 3.11+ (для локальной разработки)
+- Node.js 18+ (для разработки фронтенда)
+- VSCode с расширением Wokwi (для IoT разработки)
 
-### Installation
+### Настройка Windows
 
-1. **Clone the repository**
+**Важно**: На Windows могут возникнуть проблемы с монтированием файлов аутентификации Mosquitto. Проект включает упрощенную конфигурацию для разработки на Windows.
+
+1. **Клонировать репозиторий**
+   ```powershell
+   git clone <repository-url>
+   cd megalaba
+   ```
+
+2. **Создать файл окружения**
+   ```powershell
+   # Создать .env файл с минимальной конфигурацией
+   @"
+   SECRET_KEY=changeme
+   CORS_ORIGINS=http://localhost:3000
+   "@ | Out-File -FilePath .env -Encoding UTF8
+   ```
+
+3. **Запустить сервисы с Docker Compose**
+   ```powershell
+   docker compose up --build -d
+   ```
+
+4. **Проверить работу сервисов**
+   ```powershell
+   docker ps
+   ```
+
+5. **Доступ к приложению**
+   - Backend API: http://localhost:8000
+   - Документация API: http://localhost:8000/docs
+   - PostgreSQL: localhost:5433
+   - MQTT Брокер: localhost:1883
+
+**Устранение проблем Windows:**
+- Если Mosquitto не запускается, проверьте что в `mosquitto/mosquitto.conf` установлено `allow_anonymous true`
+- Используйте PowerShell вместо Command Prompt для лучшей поддержки Docker
+- Убедитесь что Docker Desktop запущен и имеет достаточное количество выделенных ресурсов
+
+### Установка
+
+1. **Клонировать репозиторий**
    ```bash
    git clone <repository-url>
    cd megalaba
    ```
 
-2. **Set up environment variables**
+2. **Настроить переменные окружения**
    ```bash
    cp .env.example .env
-   # Edit .env with your configuration
+   # Отредактируйте .env с вашей конфигурацией
    ```
 
-3. **Start all services with Docker Compose**
+3. **Запустить все сервисы с Docker Compose**
    ```bash
    docker-compose up -d
    ```
 
-4. **Access the application**
-   - Frontend: http://localhost:80
+4. **Доступ к приложению**
+   - Фронтенд: http://localhost:80
    - Backend API: http://localhost:8000
-   - API Documentation: http://localhost:8000/docs
-   - MQTT Broker: localhost:1883
+   - Документация API: http://localhost:8000/docs
+   - MQTT Брокер: localhost:1883
 
-### Development Setup
+### Настройка Разработки
 
-#### Backend Development
+#### Разработка Бэкенда
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # На Windows: venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-#### Frontend Development
+#### Разработка Фронтенда
 ```bash
 cd frontend
 npm install
 npm start
 ```
 
-#### IoT Development
-1. Open VSCode
-2. Install Wokwi extension
-3. Open `iot/wokwi/diagram.json`
-4. Press F1 → "Wokwi: Start Simulator"
+#### IoT Разработка
+1. Открыть VSCode
+2. Установить расширение Wokwi
+3. Открыть `iot/wokwi/diagram.json`
+4. Нажать F1 → "Wokwi: Start Simulator"
 
-## 📡 MQTT Topic Structure
+## 📡 Структура MQTT Топиков
 
-### Sensor Data Topics (ESP32 → Backend)
-- `devices/{device_id}/sensors/light` - Light sensor readings (lux)
-- `devices/{device_id}/sensors/temperature` - Temperature readings (°C)
-- `devices/{device_id}/sensors/humidity` - Humidity readings (%)
+### Топики Данных Датчиков (ESP32 → Бэкенд)
+- `devices/{device_id}/sensors/light` - Показания датчика освещенности (люксы)
+- `devices/{device_id}/sensors/temperature` - Показания температуры (°C)
+- `devices/{device_id}/sensors/humidity` - Показания влажности (%)
 
-### Command Topics (Backend → ESP32)
-- `devices/{device_id}/commands/lighting` - Lighting control
-- `devices/{device_id}/commands/heating` - Heating control
+### Топики Команд (Бэкенд → ESP32)
+- `devices/{device_id}/commands/lighting` - Управление освещением
+- `devices/{device_id}/commands/heating` - Управление отоплением
 - `devices/{device_id}/commands/ventilation` - Ventilation control
 - `devices/{device_id}/commands/watering` - Irrigation control
 

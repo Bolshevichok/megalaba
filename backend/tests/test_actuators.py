@@ -28,7 +28,7 @@ def _setup_actuator(client, auth_headers, db_session, device_status=None):
 
     resp = client.post(
         f"{API}/greenhouses/{gh_id}/devices",
-        json={"name": "Dev", "connection_type": "wifi"},
+        json={"name": "Dev", "device_type": "full-greenhouse", "connection_type": "wifi"},
         headers=auth_headers,
     )
     device_id = resp.json()["id"]
