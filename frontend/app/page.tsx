@@ -4,14 +4,16 @@ import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { COLORS, FONT } from "../types/theme";
-import { 
-  getGreenhouses, 
+import {
+  getGreenhouses,
   createGreenhouse as apiCreateGreenhouse,
   deleteGreenhouse as apiDeleteGreenhouse,
   updateGreenhouseCanvas,
   getUnassignedDevices,
   assignDevice,
-  saveScript
+  saveScript,
+  getDashboardOverview,
+  getScripts,
 } from "../lib/api";
 
 type DeviceType = "sensors" | "actuators";
@@ -35,6 +37,8 @@ type PlacedDevice = {
   x: number;
   y: number;
   currentReading?: string | number;
+  deviceStatus?: "online" | "offline";
+  actuatorActive?: boolean;
   sourceId?: number;
   capabilities?: string[];
   subTypeLabel?: string;
@@ -211,6 +215,26 @@ export default function Home() {
         }),
       );
 
+      // Load scripts for each greenhouse
+      const rulesByGh: Record<string, AutomationRule[]> = {};
+      for (const gh of fetchedGreenhouses) {
+        try {
+          const scriptsResp = await getScripts(gh.id);
+          const scripts = Array.isArray(scriptsResp) ? scriptsResp : scriptsResp?.scripts || [];
+          rulesByGh[String(gh.id)] = scripts
+            .filter((s: any) => s.script_code)
+            .map((s: any) => {
+              try {
+                return JSON.parse(s.script_code);
+              } catch {
+                return null;
+              }
+            })
+            .filter(Boolean);
+        } catch {}
+      }
+      setRulesByProject(rulesByGh);
+
       setSelectedId((prev) => {
         if (!prev && newProjects.length > 0) {
           return newProjects[0].id;
@@ -231,6 +255,96 @@ export default function Home() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // WebSocket for real-time sensor updates + polling fallback
+  useEffect(() => {
+    if (!selectedId) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const greenhouseId = Number(selectedId);
+    let ws: WebSocket | null = null;
+
+    try {
+      ws = new WebSocket(`ws://localhost:8000/ws/greenhouse/${greenhouseId}`);
+      ws.onopen = () => {
+        ws?.send(JSON.stringify({ token }));
+        console.log("[WS] connected");
+      };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "sensor_update") {
+            const { device_id, sensor_type, value } = msg.data;
+            setProjects((prev) =>
+              prev.map((p) =>
+                p.id === selectedId
+                  ? {
+                      ...p,
+                      placed: p.placed.map((d) =>
+                        d.sourceId === device_id && d.type === "sensors"
+                          ? { ...d, currentReading: value, deviceStatus: "online" as const }
+                          : d
+                      ),
+                    }
+                  : p
+              )
+            );
+          }
+        } catch {}
+      };
+      ws.onerror = () => console.log("[WS] error, falling back to polling");
+    } catch {}
+
+    // Polling fallback every 10s
+    const poll = async () => {
+      try {
+        const data = await getDashboardOverview();
+        if (!data?.greenhouses) return;
+        const gh = data.greenhouses.find((g: any) => g.id === greenhouseId);
+        if (!gh?.devices) return;
+
+        setProjects((prev) =>
+          prev.map((p) => {
+            if (p.id !== selectedId) return p;
+            return {
+              ...p,
+              placed: p.placed.map((d) => {
+                const backendDev = gh.devices.find((bd: any) => bd.id === d.sourceId);
+                if (!backendDev) return d;
+
+                const status = backendDev.status === "online" ? "online" as const : "offline" as const;
+                const readings = backendDev.latest_readings || {};
+
+                // Check if actuator is active (on)
+                const actuatorStatuses = backendDev.actuator_statuses || {};
+                const isActuatorActive = Object.values(actuatorStatuses).some((s: any) => s === "on");
+
+                if (d.type === "sensors" && d.capabilities?.length) {
+                  const cap = d.capabilities[0];
+                  const val = readings[cap];
+                  if (val !== undefined) {
+                    return { ...d, currentReading: val, deviceStatus: status, actuatorActive: isActuatorActive };
+                  }
+                  return { ...d, deviceStatus: status, actuatorActive: isActuatorActive };
+                }
+                return { ...d, deviceStatus: status, actuatorActive: isActuatorActive };
+              }),
+            };
+          })
+        );
+      } catch {}
+    };
+
+    poll();
+    const interval = setInterval(poll, 10000);
+
+    return () => {
+      clearInterval(interval);
+      if (ws && ws.readyState <= 1) ws.close();
+    };
+  }, [selectedId]);
 
   const selected = useMemo(
     () => projects.find((project) => project.id === selectedId) ?? null,
@@ -1118,9 +1232,35 @@ export default function Home() {
                     color: "#fff",
                     fontSize: 14,
                     flexShrink: 0,
+                    position: "relative",
                   }}
                 >
                   {device.order}
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: -2,
+                      right: -2,
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background:
+                        device.deviceStatus === "online" && device.actuatorActive
+                          ? "#3b82f6"
+                          : device.deviceStatus === "online"
+                            ? "#22c55e"
+                            : "#ef4444",
+                      border: "1.5px solid #1D1D1D",
+                      boxShadow: device.deviceStatus === "online" && device.actuatorActive ? "0 0 6px #3b82f6" : "none",
+                    }}
+                    title={
+                      device.deviceStatus === "online" && device.actuatorActive
+                        ? "Online — активен (скрипт)"
+                        : device.deviceStatus === "online"
+                          ? "Online"
+                          : "Offline"
+                    }
+                  />
                 </div>
                 <div
                   style={{
@@ -1509,6 +1649,23 @@ export default function Home() {
                     </>
                   )}
                 </section>
+
+                <button
+                  onClick={() => activeRule && saveRuleToServer(activeRule)}
+                  style={{
+                    marginTop: 18,
+                    padding: "10px 32px",
+                    background: "#10b981",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    fontSize: 15,
+                  }}
+                >
+                  Сохранить правило
+                </button>
               </div>
             )}
           </div>

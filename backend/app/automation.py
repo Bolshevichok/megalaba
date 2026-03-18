@@ -100,14 +100,14 @@ def check_rule_conditions(conditions: list[dict], db: Session, canvas_map: dict[
             threshold = 0.0
             
         for key_id in parsed_keys:
-            # Backward compatibility: key can be either a sensor id or a device id.
+            # Keys from frontend are device IDs, try device_id first
             candidate_sensors: list[Sensor] = []
 
-            sensor = db.query(Sensor).filter(Sensor.id == key_id).first()
-            if sensor is not None:
-                candidate_sensors = [sensor]
-            else:
-                candidate_sensors = db.query(Sensor).filter(Sensor.device_id == key_id).all()
+            candidate_sensors = db.query(Sensor).filter(Sensor.device_id == key_id).all()
+            if not candidate_sensors:
+                sensor = db.query(Sensor).filter(Sensor.id == key_id).first()
+                if sensor is not None:
+                    candidate_sensors = [sensor]
 
             if not candidate_sensors:
                 continue
@@ -147,6 +147,7 @@ def process_automation_rules(greenhouse_id: int, db: Session):
     Checks all enabled scripts for the greenhouse and applies commands to actuators.
     """
     scripts = db.query(Script).filter(Script.greenhouse_id == greenhouse_id, Script.enabled == True).all()
+    logger.info(f"Automation check: greenhouse={greenhouse_id}, scripts_found={len(scripts)}")
     canvas_map = _build_canvas_source_map(greenhouse_id, db)
     
     for script in scripts:
@@ -167,6 +168,7 @@ def process_automation_rules(greenhouse_id: int, db: Session):
             continue
             
         is_true = check_rule_conditions(conditions, db, canvas_map)
+        logger.info(f"Script '{script.name}': conditions={is_true}, actuator_keys={actuator_keys}, command={target_command}")
         
         # If true, apply target command. If false, apply opposite command.
         command_to_apply = target_command.lower() if is_true else ("off" if target_command.lower() == "on" else "on")
@@ -176,15 +178,15 @@ def process_automation_rules(greenhouse_id: int, db: Session):
             if key_id is None:
                 continue
 
-            # Backward compatibility: key can be either an actuator id or a device id.
-            actuator = db.query(Actuator).filter(Actuator.id == key_id).first()
+            # Keys from frontend are device IDs, try device_id first
+            actuator = (
+                db.query(Actuator)
+                .filter(Actuator.device_id == key_id)
+                .order_by(Actuator.id.asc())
+                .first()
+            )
             if actuator is None:
-                actuator = (
-                    db.query(Actuator)
-                    .filter(Actuator.device_id == key_id)
-                    .order_by(Actuator.id.asc())
-                    .first()
-                )
+                actuator = db.query(Actuator).filter(Actuator.id == key_id).first()
             if not actuator:
                 continue
             act_id = actuator.id
@@ -209,7 +211,8 @@ def process_automation_rules(greenhouse_id: int, db: Session):
                     # Format: cmd/<device_id>/<actuator_id> payload: on/off
                     actuator_type = actuator.actuator_type
                     act_name = actuator_type.name if actuator_type else str(act_id)
-                    topic = f"cmd/{actuator.device_id}/{act_name}"
+                    topic = f"devices/{actuator.device_id}/commands/{act_name}"
                     mqtt_client.publish(topic, f'{{"command": "{command_to_apply}"}}')
+                    logger.info(f"MQTT published: {topic} -> {command_to_apply}")
                 
     db.commit()

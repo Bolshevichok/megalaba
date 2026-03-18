@@ -137,7 +137,7 @@ def on_message(client, userdata, message) -> None:
         actuator_type_name = parts[3]
         handle_status_message(device_id_str, actuator_type_name, payload_str)
     elif category == "lwt":
-        handle_lwt_message(device_id_str)
+        handle_lwt_message(device_id_str, payload_str)
     else:
         logger.warning("Unhandled topic category '%s' in topic: %s", category, topic)
 
@@ -184,6 +184,7 @@ def handle_sensor_message(
         device = db.query(Device).filter(Device.id == device_id).first()
         if device:
             device.last_seen = datetime.now(timezone.utc)
+            device.status = "online"
 
         db.commit()
         logger.info(
@@ -199,6 +200,25 @@ def handle_sensor_message(
                 process_automation_rules(device.greenhouse_id, db)
             except Exception as e:
                 logger.error("Error processing automation rules: %s", e)
+
+            try:
+                import asyncio
+                from app.websocket import ws_manager
+                loop = asyncio.get_event_loop()
+                loop.call_soon_threadsafe(
+                    asyncio.ensure_future,
+                    ws_manager.broadcast(device.greenhouse_id, {
+                        "type": "sensor_update",
+                        "data": {
+                            "device_id": device_id,
+                            "sensor_type": sensor_type_name,
+                            "value": payload.get("value"),
+                            "device_status": "online",
+                        },
+                    }),
+                )
+            except Exception as e:
+                logger.debug("WS broadcast skipped: %s", e)
                 
     except Exception:
         db.rollback()
@@ -276,23 +296,30 @@ def handle_status_message(
         db.close()
 
 
-def handle_lwt_message(device_id_str: str) -> None:
-    """Handle a Last Will and Testament (LWT) message.
-
-    Sets the device status to offline when the MQTT broker publishes
-    the device's LWT message (indicating unexpected disconnection).
+def handle_lwt_message(device_id_str: str, payload_str: str = "") -> None:
+    """Handle a Last Will and Testament (LWT) or online announcement message.
 
     Args:
         device_id_str: Device ID as a string from the MQTT topic.
+        payload_str: JSON payload, may contain {"status": "online"} or {"status": "offline"}.
     """
     db: Session = SessionLocal()
     try:
         device_id = int(device_id_str)
         device = _get_or_create_device(db, device_id)
 
-        device.status = DeviceStatus.offline
+        status = DeviceStatus.offline
+        try:
+            data = json.loads(payload_str)
+            if data.get("status") == "online":
+                status = DeviceStatus.online
+        except Exception:
+            pass
+
+        device.status = status
+        device.last_seen = datetime.now(timezone.utc)
         db.commit()
-        logger.info("Device %s marked as offline via LWT", device_id_str)
+        logger.info("Device %s marked as %s via LWT", device_id_str, status.value)
     except Exception:
         db.rollback()
         logger.exception("Error handling LWT message for device %s", device_id_str)

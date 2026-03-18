@@ -30,20 +30,42 @@ from app.database import Base
 # actuator entries: (actuator_type_name,)
 
 DEVICE_TYPE_TEMPLATES: dict[str, dict] = {
-    "climate-sensor": {
-        "description": "DHT22 — temperature + humidity",
-        "sensors": [("temperature", "°C"), ("humidity", "%")],
+    # Sensors (one sensor per device)
+    "temperature-sensor": {
+        "description": "DHT22 — temperature sensor",
+        "sensors": [("temperature", "°C")],
         "actuators": [],
     },
-    "light-controller": {
-        "description": "LDR + LED — light sensing and control",
+    "humidity-sensor": {
+        "description": "DHT22 — humidity sensor",
+        "sensors": [("humidity", "%")],
+        "actuators": [],
+    },
+    "light-sensor": {
+        "description": "LDR — light sensor",
         "sensors": [("light", "lux")],
+        "actuators": [],
+    },
+    # Actuators (one actuator per device)
+    "lighting-actuator": {
+        "description": "LED — lighting control",
+        "sensors": [],
         "actuators": [("lighting",)],
     },
-    "full-greenhouse": {
-        "description": "DHT22 + LDR + LED — all sensors and actuators",
-        "sensors": [("temperature", "°C"), ("humidity", "%"), ("light", "lux")],
-        "actuators": [("lighting",)],
+    "heating-actuator": {
+        "description": "Heater — heating control",
+        "sensors": [],
+        "actuators": [("heating",)],
+    },
+    "ventilation-actuator": {
+        "description": "Fan — ventilation control",
+        "sensors": [],
+        "actuators": [("ventilation",)],
+    },
+    "watering-actuator": {
+        "description": "Pump — watering control",
+        "sensors": [],
+        "actuators": [("watering",)],
     },
 }
 

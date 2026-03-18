@@ -281,6 +281,7 @@ from app.routes.greenhouses import router as greenhouses_router  # noqa: E402
 from app.routes.health import router as health_router  # noqa: E402
 from app.routes.scripts import router as scripts_router  # noqa: E402
 from app.routes.sensors import router as sensors_router  # noqa: E402
+from app.routes.device_types import router as device_types_router  # noqa: E402
 
 from app.websocket import ws_manager  # noqa: E402
 
@@ -293,6 +294,7 @@ app.include_router(sensors_router, prefix="/api/v1")
 app.include_router(actuators_router, prefix="/api/v1")
 app.include_router(scripts_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
+app.include_router(device_types_router, prefix="/api/v1")
 
 
 

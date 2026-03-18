@@ -88,6 +88,20 @@ export async function saveScript(greenhouseId: number, data: { name: string; scr
 }
 
 // =======================
+// Sensor Readings
+// =======================
+export async function getSensorReadings(sensorId: number, limit = 1) {
+  return fetchWithAuth(`/sensors/${sensorId}/readings?limit=${limit}`);
+}
+
+// =======================
+// Dashboard
+// =======================
+export async function getDashboardOverview() {
+  return fetchWithAuth("/dashboard/overview");
+}
+
+// =======================
 // Auth
 // =======================
 export async function login(data: { email: string; password: string }) {
