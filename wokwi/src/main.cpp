@@ -318,7 +318,13 @@ void loop()
 
     if (millis() - lastSend >= SEND_INTERVAL)
     {
+#if IS_ACTUATOR
+        // Heartbeat — keep device online
+        snprintf(topicBuf, sizeof(topicBuf), "devices/%d/lwt", DEVICE_ID);
+        mqtt.publish(topicBuf, "{\"status\":\"online\"}", false);
+#else
         publishSensor();
+#endif
         lastSend = millis();
     }
 }
