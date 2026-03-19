@@ -4,14 +4,14 @@
   "editor": "wokwi",
   "parts": [
     { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": -4.76, "attrs": {} },
-    { "type": "wokwi-photoresistor-sensor", "id": "ldr1", "top": 70.4, "left": -268, "attrs": {} }
+    { "type": "wokwi-relay-module", "id": "relay1", "top": 211.4, "left": 115.2, "attrs": {} }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "green", [] ],
     [ "esp:RX", "$serialMonitor:TX", "green", [] ],
-    [ "ldr1:VCC", "esp:5V", "blue", [ "h9.6", "v115.2" ] ],
-    [ "ldr1:GND", "esp:GND.1", "yellow", [ "h19.2", "v57.2" ] ],
-    [ "ldr1:AO", "esp:34", "green", [ "h28.8", "v-48.7" ] ]
+    [ "relay1:VCC", "esp:5V", "green", [ "h-124.8", "v-28.8" ] ],
+    [ "relay1:GND", "esp:GND.1", "green", [ "v-0.4", "h-134.4", "v-86.4" ] ],
+    [ "relay1:IN", "esp:4", "green", [ "v28.6", "h134.4", "v-134.4" ] ]
   ],
   "serialMonitor": { "display": "auto" },
   "dependencies": {}

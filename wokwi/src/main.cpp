@@ -13,6 +13,9 @@
 #define USE_DHT_TEMPERATURE 1
 #define USE_LDR 0
 #define USE_LED 0
+#define USE_WATER_PUMP 0
+#define USE_HEATER 0
+#define USE_FAN 0
 #define DEVICE_TYPE_NAME "temperature-sensor"
 
 #elif defined(TYPE_HUMIDITY_SENSOR)
@@ -22,6 +25,9 @@
 #define USE_DHT_TEMPERATURE 0
 #define USE_LDR 0
 #define USE_LED 0
+#define USE_WATER_PUMP 0
+#define USE_HEATER 0
+#define USE_FAN 0
 #define DEVICE_TYPE_NAME "humidity-sensor"
 
 #elif defined(TYPE_LIGHT_SENSOR)
@@ -30,6 +36,9 @@
 #define USE_DHT 0
 #define USE_LDR 1
 #define USE_LED 0
+#define USE_WATER_PUMP 0
+#define USE_HEATER 0
+#define USE_FAN 0
 #define DEVICE_TYPE_NAME "light-sensor"
 
 #elif defined(TYPE_LIGHTING_ACTUATOR)
@@ -37,11 +46,46 @@
 #define USE_DHT 0
 #define USE_LDR 0
 #define USE_LED 1
+#define USE_WATER_PUMP 0
+#define USE_HEATER 0
+#define USE_FAN 0
 #define DEVICE_TYPE_NAME "lighting-actuator"
+
+#elif defined(TYPE_WATERING_ACTUATOR)
+#define SENSOR_TYPE ""
+#define USE_DHT 0
+#define USE_LDR 0
+#define USE_LED 0
+#define USE_WATER_PUMP 1
+#define USE_HEATER 0
+#define USE_FAN 0
+#define DEVICE_TYPE_NAME "watering-actuator"
+
+#elif defined(TYPE_HEATING_ACTUATOR)
+#define SENSOR_TYPE ""
+#define USE_DHT 0
+#define USE_LDR 0
+#define USE_LED 0
+#define USE_WATER_PUMP 0
+#define USE_HEATER 1
+#define USE_FAN 0
+#define DEVICE_TYPE_NAME "heating-actuator"
+
+#elif defined(TYPE_VENTILATION_ACTUATOR)
+#define SENSOR_TYPE ""
+#define USE_DHT 0
+#define USE_LDR 0
+#define USE_LED 0
+#define USE_WATER_PUMP 0
+#define USE_HEATER 0
+#define USE_FAN 1
+#define DEVICE_TYPE_NAME "ventilation-actuator"
 
 #else
 #error "No device type defined! See platformio.ini"
 #endif
+
+#define IS_ACTUATOR (USE_LED || USE_WATER_PUMP || USE_HEATER || USE_FAN)
 
 #if USE_DHT
 #include <DHT.h>
@@ -75,6 +119,15 @@ DHT dht(DHT_PIN, DHT22);
 #if USE_LED
 #define LED_PIN 2
 #endif
+#if USE_WATER_PUMP
+#define WATER_PUMP_PIN 4
+#endif
+#if USE_HEATER
+#define HEATER_PIN 5
+#endif
+#if USE_FAN
+#define FAN_PIN 18
+#endif
 
 // ==================== OBJECTS ====================
 
@@ -103,7 +156,7 @@ void connectWiFi()
 
 void onMqttMessage(char *topic, byte *payload, unsigned int length)
 {
-#if USE_LED
+#if IS_ACTUATOR
     payload[length] = '\0';
 
     JsonDocument doc;
@@ -115,13 +168,28 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length)
         return;
 
     bool turnOn = (strcmp(command, "on") == 0);
+
+#if USE_LED
     digitalWrite(LED_PIN, turnOn ? HIGH : LOW);
     Serial.printf("[LED] %s\n", turnOn ? "ON" : "OFF");
-
-    // Confirm status
     snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/lighting", DEVICE_ID);
+#elif USE_WATER_PUMP
+    digitalWrite(WATER_PUMP_PIN, turnOn ? HIGH : LOW);
+    Serial.printf("[WATER_PUMP] %s\n", turnOn ? "ON" : "OFF");
+    snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/watering", DEVICE_ID);
+#elif USE_HEATER
+    digitalWrite(HEATER_PIN, turnOn ? HIGH : LOW);
+    Serial.printf("[HEATER] %s\n", turnOn ? "ON" : "OFF");
+    snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/heating", DEVICE_ID);
+#elif USE_FAN
+    digitalWrite(FAN_PIN, turnOn ? HIGH : LOW);
+    Serial.printf("[FAN] %s\n", turnOn ? "ON" : "OFF");
+    snprintf(topicBuf, sizeof(topicBuf), "devices/%d/status/ventilation", DEVICE_ID);
+#endif
+
     snprintf(payloadBuf, sizeof(payloadBuf), "{\"status\":\"%s\"}", command);
     mqtt.publish(topicBuf, payloadBuf, false);
+    Serial.printf("[MQTT] Status sent: %s\n", topicBuf);
 #else
     (void)topic;
     (void)payload;
@@ -149,7 +217,7 @@ void connectMQTT()
             snprintf(topicBuf, sizeof(topicBuf), "devices/%d/lwt", DEVICE_ID);
             mqtt.publish(topicBuf, "{\"status\":\"online\"}", false);
 
-#if USE_LED
+#if IS_ACTUATOR
             snprintf(topicBuf, sizeof(topicBuf), "devices/%d/commands/+", DEVICE_ID);
             mqtt.subscribe(topicBuf, 1);
             Serial.printf("[MQTT] Subscribed: %s\n", topicBuf);
@@ -179,9 +247,6 @@ void publishSensor()
     Serial.printf("[SENSOR] humidity = %.1f%%\n", val);
 #elif USE_LDR
     int raw = analogRead(LDR_PIN);
-    // Wokwi photoresistor-sensor: formula from docs adapted for 3.3V
-    // Circuit: VCC -> 10K -> AO -> LDR -> GND
-    // R_ldr = 10000 * voltage / (VCC - voltage)
     const float GAMMA = 0.7;
     const float RL10 = 50; // kOhm at 10 lux
     const float VCC = 3.3;
@@ -196,7 +261,7 @@ void publishSensor()
     return;
 #endif
 
-#if !USE_LED
+#if !IS_ACTUATOR
     snprintf(topicBuf, sizeof(topicBuf), "devices/%d/sensors/%s", DEVICE_ID, SENSOR_TYPE);
     snprintf(payloadBuf, sizeof(payloadBuf), "{\"value\":%.2f}", val);
     mqtt.publish(topicBuf, payloadBuf);
@@ -217,6 +282,18 @@ void setup()
 #if USE_LED
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
+#endif
+#if USE_WATER_PUMP
+    pinMode(WATER_PUMP_PIN, OUTPUT);
+    digitalWrite(WATER_PUMP_PIN, LOW);
+#endif
+#if USE_HEATER
+    pinMode(HEATER_PIN, OUTPUT);
+    digitalWrite(HEATER_PIN, LOW);
+#endif
+#if USE_FAN
+    pinMode(FAN_PIN, OUTPUT);
+    digitalWrite(FAN_PIN, LOW);
 #endif
 #if USE_DHT
     dht.begin();
@@ -241,7 +318,13 @@ void loop()
 
     if (millis() - lastSend >= SEND_INTERVAL)
     {
+#if IS_ACTUATOR
+        // Heartbeat — keep device online
+        snprintf(topicBuf, sizeof(topicBuf), "devices/%d/lwt", DEVICE_ID);
+        mqtt.publish(topicBuf, "{\"status\":\"online\"}", false);
+#else
         publishSensor();
+#endif
         lastSend = millis();
     }
 }

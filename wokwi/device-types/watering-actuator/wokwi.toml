@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = '../../.pio/build/watering-actuator/firmware.bin'
+elf = '../../.pio/build/watering-actuator/firmware.elf'

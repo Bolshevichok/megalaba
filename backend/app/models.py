@@ -28,6 +28,8 @@ from app.database import Base
 # Each type defines which sensors and actuators are auto-created.
 # sensor entries: (sensor_type_name, unit)
 # actuator entries: (actuator_type_name,)
+#
+# Модульная архитектура: каждый сенсор/актуатор — отдельное устройство.
 
 DEVICE_TYPE_TEMPLATES: dict[str, dict] = {
     # Sensors (one sensor per device)

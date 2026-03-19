@@ -45,7 +45,7 @@ def test_list_sensors(client, auth_headers, db_session):
 
     resp = client.post(
         f"{API}/greenhouses/{gh_id}/devices",
-        json={"name": "Dev", "connection_type": "wifi"},
+        json={"name": "Dev", "device_type": "temperature-sensor", "connection_type": "wifi"},
         headers=auth_headers,
     )
     device_id = resp.json()["id"]
@@ -82,7 +82,7 @@ def test_create_reading(client, auth_headers, db_session):
 
     resp = client.post(
         f"{API}/greenhouses/{gh_id}/devices",
-        json={"name": "Dev", "connection_type": "wifi"},
+        json={"name": "Dev", "device_type": "temperature-sensor", "connection_type": "wifi"},
         headers=auth_headers,
     )
     device_id = resp.json()["id"]
@@ -120,7 +120,7 @@ def test_get_readings_history(client, auth_headers, db_session):
 
     resp = client.post(
         f"{API}/greenhouses/{gh_id}/devices",
-        json={"name": "Dev", "connection_type": "wifi"},
+        json={"name": "Dev", "device_type": "temperature-sensor", "connection_type": "wifi"},
         headers=auth_headers,
     )
     device_id = resp.json()["id"]

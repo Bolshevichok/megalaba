@@ -22,7 +22,7 @@ def test_dashboard_overview(client, auth_headers, db_session):
 
     resp = client.post(
         f"{API}/greenhouses/{gh_id}/devices",
-        json={"name": "Dash Device", "connection_type": "wifi"},
+        json={"name": "Dash Device", "device_type": "temperature-sensor", "connection_type": "wifi"},
         headers=auth_headers,
     )
     device_id = resp.json()["id"]
