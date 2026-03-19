@@ -58,7 +58,7 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
         name=data.name,
         email=data.email,
         password_hash=pwd_context.hash(data.password),
-        phone=data.phone,
+
     )
     db.add(user)
     db.commit()

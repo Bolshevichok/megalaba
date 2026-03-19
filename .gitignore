@@ -14,3 +14,5 @@ dist/
 .idea/
 Thumbs.db
 mosquitto/passwd
+.next/*
+node_modules/

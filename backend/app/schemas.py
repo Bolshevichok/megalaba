@@ -95,10 +95,12 @@ class GreenhouseCreate(BaseModel):
     Attributes:
         name: Greenhouse name.
         location: Optional location string.
+        canvas_state: Optional JSON string of frontend UI positions.
     """
 
     name: str = Field(..., max_length=100)
     location: str | None = None
+    canvas_state: str | None = None
 
 
 class GreenhouseUpdate(BaseModel):
@@ -107,10 +109,12 @@ class GreenhouseUpdate(BaseModel):
     Attributes:
         name: New name.
         location: New location.
+        canvas_state: New canvas state JSON string.
     """
 
     name: str | None = None
     location: str | None = None
+    canvas_state: str | None = None
 
 
 class GreenhouseResponse(BaseModel):
@@ -121,12 +125,14 @@ class GreenhouseResponse(BaseModel):
         user_id: Owner user ID.
         name: Greenhouse name.
         location: Location string.
+        canvas_state: UI visual arrangement JSON string.
     """
 
     id: int
     user_id: int
     name: str | None = None
     location: str | None = None
+    canvas_state: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -151,13 +157,13 @@ class DeviceCreate(BaseModel):
 
     Attributes:
         name: Device name.
-        device_type: Template type (temperature-sensor/humidity-sensor/light-sensor/watering-actuator/heating-actuator/ventilation-actuator/lighting-actuator).
+        device_type: Template type — must match a key in DEVICE_TYPE_TEMPLATES.
         connection_type: Connection type (wifi/gsm/ethernet/zigbee).
         ip_address: Optional IP address.
     """
 
     name: str = Field(..., max_length=100)
-    device_type: str = Field(..., pattern="^(temperature-sensor|humidity-sensor|light-sensor|watering-actuator|heating-actuator|ventilation-actuator|lighting-actuator)$")
+    device_type: str = Field(..., pattern="^(temperature-sensor|humidity-sensor|light-sensor|lighting-actuator|heating-actuator|ventilation-actuator|watering-actuator)$")
     connection_type: str | None = None
     ip_address: str | None = None
 
@@ -187,15 +193,23 @@ class DeviceResponse(BaseModel):
         ip_address: IP address.
         status: Online/offline status.
         last_seen: Last MQTT activity timestamp.
+        sensor_count: Number of sensors attached to the device.
+        actuator_count: Number of actuators attached to the device.
+        sensors: List of attached sensors.
+        actuators: List of attached actuators.
     """
 
     id: int
-    greenhouse_id: int
+    greenhouse_id: int | None = None
     name: str | None = None
     connection_type: str | None = None
     ip_address: str | None = None
     status: str | None = None
     last_seen: datetime | None = None
+    sensor_count: int = 0
+    actuator_count: int = 0
+    sensors: list["SensorResponse"] = []
+    actuators: list["ActuatorResponse"] = []
 
     model_config = {"from_attributes": True}
 
@@ -249,6 +263,7 @@ class SensorResponse(BaseModel):
         sensor_type_id: Sensor type FK.
         name: Sensor name.
         unit: Measurement unit.
+        type_name: String name of the sensor type.
     """
 
     id: int
@@ -256,6 +271,7 @@ class SensorResponse(BaseModel):
     sensor_type_id: int
     name: str | None = None
     unit: str | None = None
+    type_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -335,12 +351,14 @@ class ActuatorResponse(BaseModel):
         device_id: Parent device ID.
         actuator_type_id: Actuator type FK.
         status: Current on/off status.
+        type_name: String name of the actuator type.
     """
 
     id: int
     device_id: int
     actuator_type_id: int
     status: str | None = None
+    type_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -422,7 +440,7 @@ class ScriptResponse(BaseModel):
     """
 
     id: int
-    greenhouse_id: int
+    greenhouse_id: int | None = None
     name: str | None = None
     script_code: str | None = None
     enabled: bool | None = None

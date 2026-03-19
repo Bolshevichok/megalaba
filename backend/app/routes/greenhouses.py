@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Greenhouse, User
+from app.models import Device, Greenhouse, User
 from app.schemas import (
     GreenhouseCreate,
     GreenhouseListResponse,
@@ -175,5 +175,12 @@ def delete_greenhouse(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Greenhouse not found",
         )
+
+    # Keep devices as unassigned instead of deleting them with the greenhouse.
+    db.query(Device).filter(Device.greenhouse_id == greenhouse.id).update(
+        {Device.greenhouse_id: None},
+        synchronize_session=False,
+    )
+
     db.delete(greenhouse)
     db.commit()

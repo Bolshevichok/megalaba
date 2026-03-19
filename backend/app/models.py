@@ -32,42 +32,42 @@ from app.database import Base
 # Модульная архитектура: каждый сенсор/актуатор — отдельное устройство.
 
 DEVICE_TYPE_TEMPLATES: dict[str, dict] = {
-    # СЕНСОРЫ
+    # Sensors (one sensor per device)
     "temperature-sensor": {
-        "description": "DHT22 — датчик температуры",
+        "description": "DHT22 — temperature sensor",
         "sensors": [("temperature", "°C")],
         "actuators": [],
     },
     "humidity-sensor": {
-        "description": "DHT22 — датчик влажности воздуха",
+        "description": "DHT22 — humidity sensor",
         "sensors": [("humidity", "%")],
         "actuators": [],
     },
     "light-sensor": {
-        "description": "LDR — датчик освещённости",
+        "description": "LDR — light sensor",
         "sensors": [("light", "lux")],
         "actuators": [],
     },
-    # АКТУАТОРЫ
-    "watering-actuator": {
-        "description": "Водяной насос — система полива",
+    # Actuators (one actuator per device)
+    "lighting-actuator": {
+        "description": "LED — lighting control",
         "sensors": [],
-        "actuators": [("watering",)],
+        "actuators": [("lighting",)],
     },
     "heating-actuator": {
-        "description": "Нагреватель — система обогрева",
+        "description": "Heater — heating control",
         "sensors": [],
         "actuators": [("heating",)],
     },
     "ventilation-actuator": {
-        "description": "Вентилятор — система проветривания",
+        "description": "Fan — ventilation control",
         "sensors": [],
         "actuators": [("ventilation",)],
     },
-    "lighting-actuator": {
-        "description": "LED — система освещения",
+    "watering-actuator": {
+        "description": "Pump — watering control",
         "sensors": [],
-        "actuators": [("lighting",)],
+        "actuators": [("watering",)],
     },
 }
 
@@ -111,9 +111,6 @@ class User(Base):
         name: User display name.
         email: Unique email address.
         password_hash: Bcrypt-hashed password.
-        billing_address: Optional billing address.
-        phone: Optional phone number.
-        greenhouses: Related greenhouses.
     """
 
     __tablename__ = "users"
@@ -122,8 +119,6 @@ class User(Base):
     name = Column(String(100), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    billing_address = Column(Text, nullable=True)
-    phone = Column(String(20), nullable=True)
 
     greenhouses = relationship("Greenhouse", back_populates="user", cascade="all, delete-orphan")
 
@@ -147,9 +142,10 @@ class Greenhouse(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=True)
     location = Column(String(255), nullable=True)
+    canvas_state = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="greenhouses")
-    devices = relationship("Device", back_populates="greenhouse", cascade="all, delete-orphan")
+    devices = relationship("Device", back_populates="greenhouse")
     scripts = relationship("Script", back_populates="greenhouse", cascade="all, delete-orphan")
 
 
@@ -172,7 +168,7 @@ class Device(Base):
     __tablename__ = "devices"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    greenhouse_id = Column(Integer, ForeignKey("greenhouses.id", ondelete="CASCADE"), nullable=False)
+    greenhouse_id = Column(Integer, ForeignKey("greenhouses.id", ondelete="CASCADE"), nullable=True) # Nullable for unassigned devices (Plug&Play)
     name = Column(String(100), nullable=True)
     connection_type = Column(Enum(ConnectionType), nullable=True)
     ip_address = Column(String(50), nullable=True)
